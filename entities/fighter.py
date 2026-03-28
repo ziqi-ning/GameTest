@@ -153,6 +153,11 @@ class Fighter:
                 self.state = FighterState.IDLE
                 self.animator.set_state(AnimationState.IDLE)
 
+        # HIT状态结束后恢复IDLE
+        if self.state == FighterState.HIT:
+            self.state = FighterState.IDLE
+            self.animator.set_state(AnimationState.IDLE)
+
         # 更新连击显示
         if self.combo_display_timer > 0:
             self.combo_display_timer -= dt
@@ -388,6 +393,7 @@ class Fighter:
         self.state = FighterState.HIT
         self.animator.set_state(AnimationState.HIT)
         self.hitstun_timer = 0.3
+        print(f"[Fighter {self.player_id}] entering HIT state, hitstun_timer={self.hitstun_timer}")
 
         # 检查KO
         if self.health <= 0:
