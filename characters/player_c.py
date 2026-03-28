@@ -1,9 +1,9 @@
-# 角色C - 均衡型（绿色）
-from characters.character_base import CharacterData, get_default_moves, get_default_special
+# 角色C - 神秘人（技巧型，主题：叛国）
+from characters.character_base import (
+    CharacterData, get_shenmiren_moves, get_shenmiren_special
+)
+
 
 def create_player_c() -> CharacterData:
-    stats = CharacterData.create_balanced_type()
-    stats.name = "全能"
-    stats.name_cn = "全能"
-    stats.description = "均衡型角色，各项能力平衡，上手容易"
-    return CharacterData(stats, get_default_moves(stats), get_default_special(stats))
+    stats = CharacterData.create_shenmiren()
+    return CharacterData(stats, get_shenmiren_moves(stats), get_shenmiren_special(stats))

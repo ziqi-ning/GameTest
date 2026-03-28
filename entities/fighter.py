@@ -1,6 +1,7 @@
 # Fighter - 战斗角色基类
 
 import pygame
+import random
 from typing import Optional, Tuple, List
 from config import GROUND_Y, GRAVITY, Colors
 from constants import FighterState, Direction, FrameData, DamageMultiplier
@@ -10,9 +11,10 @@ from combat import (
     ComboSystem, HitboxManager, ProjectileManager,
     calculate_damage, calculate_knockback, calculate_hitstun,
     calculate_special_energy_gain, get_attack_multiplier,
-    SpecialMoveManager
+    SpecialMoveManager, EffectManager, CharacterEffects
 )
-from characters.character_base import CharacterData, MoveData
+from characters.character_base import CharacterData, MoveData, SpecialMoveData
+
 
 class Fighter:
     """战斗角色基类"""
@@ -52,11 +54,18 @@ class Fighter:
         self.special_manager = SpecialMoveManager()
         self.projectile_manager = ProjectileManager()
 
+        # 特效系统
+        self.effect_manager = EffectManager()
+        self.effect_func = CharacterEffects.get_effect_function(self.stats.name_cn)
+
         # 攻击状态
         self.current_attack: Optional[MoveData] = None
+        self.current_special: Optional[SpecialMoveData] = None
         self.attack_frame = 0
         self.attack_cooldown = 0.0
         self.is_attacking = False
+        self.is_special_attacking = False
+        self.special_hit_count = 0  # 必杀技命中计数
 
         # 受击状态
         self.hitstun_timer = 0.0
@@ -71,9 +80,15 @@ class Fighter:
         self.hit_effect_timer = 0.0
         self.screen_shake = 0.0
 
+        # 特殊效果状态
+        self.slow_timer = 0.0  # 减速效果
+        self.stun_timer = 0.0  # 眩晕效果
+        self.curse_timer = 0.0  # 诅咒效果（降低攻击）
+        self.shield_value = 0  # 护盾值
+
         # 装备必杀技
         if char_data.special:
-            self.special_manager.set_special_moves([char_data.special])
+            self.special_manager.set_special_moves(char_data.special)
 
     @property
     def facing_right(self) -> bool:
@@ -126,6 +141,18 @@ class Fighter:
 
     def update(self, dt: float, opponent: Optional['Fighter'] = None):
         """更新角色状态"""
+        # 更新特效系统
+        self.effect_manager.update(dt)
+
+        # 更新特殊状态效果
+        if self.slow_timer > 0:
+            self.slow_timer -= dt
+        if self.stun_timer > 0:
+            self.stun_timer -= dt
+            return  # 眩晕时不能动
+        if self.curse_timer > 0:
+            self.curse_timer -= dt
+
         # 更新无敌时间
         if self.invincible_timer > 0:
             self.invincible_timer -= dt
@@ -272,7 +299,6 @@ class Fighter:
 
     def attack_special(self):
         """必杀技"""
-        # 使用 Fighter 的 special_energy 而不是 special_manager 的
         if self.special_energy < self.char_data.stats.special_cost:
             return
         if self.is_attacking or self.hitstun_timer > 0:
@@ -280,11 +306,18 @@ class Fighter:
 
         self.special_energy -= self.char_data.stats.special_cost
         self.is_attacking = True
+        self.is_special_attacking = True
         self.attack_frame = 0
-        self.current_attack = self.char_data.special
+        self.current_special = self.char_data.special[0]  # 使用第一个必杀技
         self.state = FighterState.ATTACK_SPECIAL
         self.animator.set_state(AnimationState.ATTACK_SPECIAL)
         self.vel_x = 0
+        self.special_hit_count = 0
+
+        # 触发必杀技特效
+        if self.effect_func:
+            effect_x = self.x + (50 if self.facing_right else -50)
+            self.effect_func(self.effect_manager, effect_x, self.y - 50, self.current_special.name_cn)
 
     def update_attack(self, dt: float, opponent: Optional['Fighter'] = None):
         """更新攻击状态"""
@@ -307,6 +340,7 @@ class Fighter:
         # 攻击结束
         if self.attack_frame >= move.total_frames:
             self.is_attacking = False
+            self.is_special_attacking = False
             self.current_attack = None
             self.attack_cooldown = 0.1
             self.state = FighterState.IDLE
@@ -335,6 +369,11 @@ class Fighter:
                 self.apply_blocked_hit(opponent, move)
             elif not opponent.is_invincible:
                 self.apply_hit(opponent, move)
+
+                # 触发命中特效
+                if self.effect_func:
+                    effect_x = opponent.x
+                    self.effect_func(self.effect_manager, effect_x, opponent.y - 50, move.name)
 
     def apply_hit(self, opponent: 'Fighter', move):
         """应用命中效果"""
@@ -381,6 +420,23 @@ class Fighter:
 
     def take_damage(self, damage: int, knockback: float, knockback_up: float, direction: int):
         """承受伤害"""
+        # 神秘人被动闪避检查
+        if hasattr(self.stats, 'dodge_chance') and self.stats.dodge_chance > 0:
+            if random.random() < self.stats.dodge_chance:
+                # 闪避成功！
+                self.effect_manager.add_text("闪避!", self.x, self.y - 80, (255, 255, 100), 36, 1.0)
+                self.effect_manager.add_particle_burst(self.x, self.y - 50, 8, (255, 255, 200), 5.0, 4.0)
+                return
+
+        # 护盾吸收伤害
+        if self.shield_value > 0:
+            absorbed = min(self.shield_value, damage)
+            self.shield_value -= absorbed
+            damage -= absorbed
+            if damage <= 0:
+                self.effect_manager.add_text("护盾!", self.x, self.y - 80, (100, 200, 255), 32, 1.0)
+                return
+
         self.health = max(0, self.health - damage)
         self.is_invincible = True
         self.invincible_timer = 0.3
@@ -467,6 +523,16 @@ class Fighter:
             pygame.draw.circle(surface, (255, 200, 50),
                              (int(self.x - camera_x), int(self.y - 80)), 20, 3)
 
+        # 绘制护盾
+        if self.shield_value > 0:
+            shield_alpha = min(100, self.shield_value // 3)
+            shield_surf = pygame.Surface((80, 120), pygame.SRCALPHA)
+            pygame.draw.ellipse(shield_surf, (100, 200, 255, shield_alpha), (0, 0, 80, 120), 3)
+            surface.blit(shield_surf, (int(self.x - 40 - camera_x), int(self.y - 120)))
+
+        # 绘制特效
+        self.effect_manager.draw(surface)
+
     def reset(self, x: float, y: float):
         """重置角色状态"""
         self.x = x
@@ -480,8 +546,19 @@ class Fighter:
         self.block_input = False
         self.is_invincible = False
         self.is_attacking = False
+        self.is_special_attacking = False
         self.current_attack = None
+        self.current_special = None
         self.hitstun_timer = 0
         self.combat.reset()
         self.animator.reset()
         self.hit_effect_timer = 0
+        self.slow_timer = 0
+        self.stun_timer = 0
+        self.curse_timer = 0
+        self.shield_value = 0
+        # 清除特效
+        self.effect_manager.effect_texts.clear()
+        self.effect_manager.particles.clear()
+        self.effect_manager.effect_rings.clear()
+        self.effect_manager.slash_effects.clear()

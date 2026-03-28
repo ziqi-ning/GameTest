@@ -9,6 +9,7 @@ from combat.damage import (
     get_attack_multiplier
 )
 from combat.special_moves import SpecialMoveManager, Projectile, ProjectileManager
+from combat.effects import EffectManager, CharacterEffects
 
 __all__ = [
     'ComboSystem',
@@ -21,4 +22,6 @@ __all__ = [
     'SpecialMoveManager',
     'Projectile',
     'ProjectileManager',
+    'EffectManager',
+    'CharacterEffects',
 ]
