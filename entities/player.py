@@ -28,13 +28,13 @@ class Player(Fighter):
         # 应用移动
         self.apply_movement(left, right, up, down, block)
 
-        # 攻击输入
-        if light_attack and self.attack_cooldown <= 0:
-            self.attack_light()
+        # 攻击输入 (优先级: 必杀技 > 重攻击 > 轻攻击)
+        if special:
+            self.attack_special()
         elif heavy_attack and self.attack_cooldown <= 0:
             self.attack_heavy()
-        elif special:
-            self.attack_special()
+        elif light_attack and self.attack_cooldown <= 0:
+            self.attack_light()
 
     def update(self, dt: float, opponent: Optional[Fighter] = None):
         """更新玩家状态"""

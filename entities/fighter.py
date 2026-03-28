@@ -265,10 +265,13 @@ class Fighter:
 
     def attack_special(self):
         """必杀技"""
-        if not self.special_manager.can_use_special() or self.is_attacking or self.hitstun_timer > 0:
+        # 使用 Fighter 的 special_energy 而不是 special_manager 的
+        if self.special_energy < self.char_data.stats.special_cost:
+            return
+        if self.is_attacking or self.hitstun_timer > 0:
             return
 
-        self.special_manager.use_special()
+        self.special_energy -= self.char_data.stats.special_cost
         self.is_attacking = True
         self.attack_frame = 0
         self.current_attack = self.char_data.special

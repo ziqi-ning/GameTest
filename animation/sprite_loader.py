@@ -15,11 +15,13 @@ ANIMATION_MAPPING = {
     'jump': 'jump.png',
     'attack_light': 'jab.png',
     'attack_heavy': 'kick.png',
+    'attack_special': 'kick.png',  # 必杀技暂用kick
     'hit': 'hurt.png',
-    'block': 'hurt.png',  # 用hurt代替，需要新建
-    'ko': 'hurt.png',  # 用hurt代替，需要新建
+    'block': 'hurt.png',
+    'ko': 'hurt.png',
     'dive_kick': 'dive_kick.png',
     'jump_kick': 'jump_kick.png',
+    'special': 'kick.png',  # 别名
 }
 
 # 每个精灵表的总帧数
