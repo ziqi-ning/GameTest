@@ -401,43 +401,45 @@ class Fighter:
     def draw(self, surface: pygame.Surface, camera_x: int = 0):
         """绘制角色"""
         from animation.sprite_loader import get_sprite
-        from characters import CHARACTER_LIST
+        from animation.animator import Animator
 
-        # 获取角色颜色
-        char_info = CHARACTER_LIST[self.player_id - 1] if self.player_id <= 4 else CHARACTER_LIST[0]
-        primary = char_info['color']
-        secondary = tuple(max(0, c - 50) for c in primary)
-
-        # 获取当前精灵
+        # 获取当前动画帧
         pose = self.animator.get_pose_name()
+        anim_frame = self.animator.get_current_frame()
+
+        # 获取精灵帧
         sprite = get_sprite(
             self.player_id - 1,
             pose,
             self.facing_right,
-            primary,
-            secondary
+            anim_frame
         )
 
-        # 位置
-        draw_x = self.x - 60 - camera_x
-        draw_y = self.y - 160
+        if sprite is None:
+            return
+
+        # 位置调整 (精灵高度偏移)
+        draw_x = self.x - 48 - camera_x  # 96/2 = 48
+        draw_y = self.y - 63  # 精灵高度
 
         # 无敌闪烁
         if self.is_invincible and int(self.invincible_timer * 20) % 2 == 0:
             sprite.set_alpha(100)
 
-        # KO倒地效果
+        # KO倒地效果 - 旋转倒地
         if self.state == FighterState.KO:
-            draw_y += 80
-
-        # 绘制精灵
-        surface.blit(sprite, (draw_x, draw_y))
+            sprite_copy = pygame.transform.rotate(sprite, -90)
+            draw_x = self.x - sprite_copy.get_width() // 2 - camera_x
+            draw_y = self.y - 40
+            surface.blit(sprite_copy, (draw_x, draw_y))
+        else:
+            # 绘制精灵
+            surface.blit(sprite, (draw_x, draw_y))
 
         # 绘制受击特效
         if self.hit_effect_timer > 0:
-            import math
             pygame.draw.circle(surface, (255, 200, 50),
-                             (int(self.x - camera_x), int(self.y - 100)), 30, 3)
+                             (int(self.x - camera_x), int(self.y - 80)), 20, 3)
 
     def reset(self, x: float, y: float):
         """重置角色状态"""

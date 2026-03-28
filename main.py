@@ -241,7 +241,7 @@ class Game:
             self.player2 = Player(2, p2_data, 980, self.stage.ground_y)
 
         self.announcement.show("ROUND 1", 1.5)
-        pygame.time.set_timer(pygame.USEREVENT + 1, 2000, True)
+        pygame.time.set_timer(pygame.USEREVENT + 1, 2000, loops=1)
 
     def check_match_end(self):
         """检查比赛结束"""
@@ -273,7 +273,7 @@ class Game:
             self.state = GameState.ROUND_END
             self.victory_screen.show(2)
         else:
-            pygame.time.set_timer(pygame.USEREVENT + 2, 2000, one_shot=True)
+            pygame.time.set_timer(pygame.USEREVENT + 2, 2000, loops=1)
 
     def end_round_timeout(self):
         """超时结束"""
@@ -285,7 +285,7 @@ class Game:
             self.end_round(2)
         else:
             self.announcement.show("TIME!", 1.0)
-            pygame.time.set_timer(pygame.USEREVENT + 3, 1500, one_shot=True)
+            pygame.time.set_timer(pygame.USEREVENT + 3, 1500, loops=1)
 
     def reset_match(self):
         """重置比赛"""
