@@ -149,7 +149,9 @@ class Fighter:
         # 更新防御状态
         if not self.block_input and self.is_blocking:
             self.is_blocking = False
-            self.state = FighterState.IDLE
+            if self.state != FighterState.IDLE:
+                self.state = FighterState.IDLE
+                self.animator.set_state(AnimationState.IDLE)
 
         # 更新连击显示
         if self.combo_display_timer > 0:
@@ -284,6 +286,11 @@ class Fighter:
         self.attack_frame += 1
 
         move = self.current_attack
+
+        # 同步动画帧 (让动画跟着攻击帧走)
+        anim_frame = min(self.attack_frame // 3, self.animator.get_frame_count() - 1)
+        # 强制设置动画帧
+        self.animator.frame = anim_frame
 
         # 判定帧
         if (move.active_start <= self.attack_frame <

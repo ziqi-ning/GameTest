@@ -23,26 +23,26 @@ class Animator:
 
     def _setup_default_animations(self):
         """设置默认动画配置"""
-        # 每个状态的帧数配置
+        # 每个状态的帧数配置 (与精灵帧数匹配)
         frame_counts = {
-            AnimationState.IDLE: 8,
-            AnimationState.WALK: 8,
+            AnimationState.IDLE: 4,
+            AnimationState.WALK: 6,
             AnimationState.JUMP: 4,
             AnimationState.FALL: 4,
             AnimationState.CROUCH: 1,
-            AnimationState.ATTACK_LIGHT: 10,
-            AnimationState.ATTACK_HEAVY: 14,
-            AnimationState.ATTACK_SPECIAL: 23,
-            AnimationState.HIT: 8,
-            AnimationState.BLOCK: 1,
-            AnimationState.KO: 1,
+            AnimationState.ATTACK_LIGHT: 3,   # jab.png 只有3帧
+            AnimationState.ATTACK_HEAVY: 5,    # kick.png 有5帧
+            AnimationState.ATTACK_SPECIAL: 5,  # 暂用kick
+            AnimationState.HIT: 2,             # hurt.png 只有2帧
+            AnimationState.BLOCK: 2,
+            AnimationState.KO: 2,
             AnimationState.LAND: 4,
         }
 
         for state, count in frame_counts.items():
             self.animations[state] = {
                 'frame_count': count,
-                'fps': self.fps,
+                'fps': 12,  # 12 FPS
                 'loop': state in [AnimationState.IDLE, AnimationState.WALK]
             }
 
@@ -70,9 +70,9 @@ class Animator:
         ]
 
         if from_state in attack_states:
-            # 攻击动画中后期可以被打断
-            progress = self.frame / self.get_frame_count(from_state)
-            return progress > 0.7
+            # 攻击动画后期可以被打断
+            progress = self.frame / max(1, self.get_frame_count(from_state) - 1)
+            return progress >= 0.8
 
         # 受击状态不能被中断
         if from_state in [AnimationState.HIT, AnimationState.KO]:
