@@ -74,8 +74,13 @@ class Animator:
             progress = self.frame / max(1, self.get_frame_count(from_state) - 1)
             return progress >= 0.8
 
-        # 受击状态不能被中断
-        if from_state in [AnimationState.HIT, AnimationState.KO]:
+        # HIT状态动画播放完可以被中断
+        if from_state == AnimationState.HIT:
+            progress = self.frame / max(1, self.get_frame_count(from_state) - 1)
+            return progress >= 0.9
+
+        # KO状态不能被中断
+        if from_state == AnimationState.KO:
             return False
 
         return True

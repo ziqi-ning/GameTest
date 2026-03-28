@@ -393,7 +393,6 @@ class Fighter:
         self.state = FighterState.HIT
         self.animator.set_state(AnimationState.HIT)
         self.hitstun_timer = 0.3
-        print(f"[Fighter {self.player_id}] entering HIT state, hitstun_timer={self.hitstun_timer}")
 
         # 检查KO
         if self.health <= 0:
