@@ -159,6 +159,11 @@ class Fighter:
         if self.hit_effect_timer > 0:
             self.hit_effect_timer -= dt
 
+        # 被动能量回复 (战斗中缓慢回复)
+        if self.special_energy < self.max_special:
+            self.special_energy = min(self.max_special,
+                                      self.special_energy + 3 * dt)  # 每秒回复3点能量
+
         # 重力
         if not self.on_ground:
             self.vel_y += GRAVITY * 60 * dt
@@ -333,9 +338,15 @@ class Fighter:
         # 更新连击
         combo_count = self.combat.register_hit(damage, move.name)
 
-        # 更新能量
+        # 更新能量 (根据攻击类型)
+        if 'light' in move.name:
+            energy_type = 'light'
+        elif 'heavy' in move.name:
+            energy_type = 'heavy'
+        else:
+            energy_type = 'light'
         self.special_energy = min(self.max_special,
-                                  self.special_energy + calculate_special_energy_gain(damage, 'light'))
+                                  self.special_energy + calculate_special_energy_gain(damage, energy_type))
 
         # 视觉效果
         opponent.hit_effect_timer = 0.2

@@ -63,11 +63,11 @@ def calculate_hitstun(base_hitstun: int, is_blocking: bool = False) -> int:
 def calculate_special_energy_gain(damage: int, attack_type: str) -> int:
     """计算必杀技能量获取"""
     energy_gains = {
-        'light': 5,
-        'heavy': 10,
-        'special': 0,  # 必杀技不获取能量
-        'hit_received': 3,  # 受击获得少量能量
-        'ko': 20,  # KO获得能量
+        'light': 12,      # 轻攻击获得12能量
+        'heavy': 20,      # 重攻击获得20能量
+        'special': 0,    # 必杀技不获取能量
+        'hit_received': 8,  # 受击获得能量
+        'ko': 30,         # KO获得能量
     }
     return energy_gains.get(attack_type, 5)
 

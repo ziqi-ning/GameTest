@@ -175,7 +175,7 @@ def get_default_special(stats: CharacterStats) -> SpecialMoveData:
         name="special_attack",
         name_cn="必杀技",
         damage=int(150 * power_mult),
-        energy_cost=100,
+        energy_cost=80,  # 降低能量需求
         hitbox_offset=(50, 10),
         hitbox_size=(100, 100),
         active_start=5,
