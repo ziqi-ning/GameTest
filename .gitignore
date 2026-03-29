@@ -19,10 +19,9 @@ venv/
 Thumbs.db
 
 # Game specific
-*.png
-*.jpg
-*.wav
-*.mp3
+# (PNG/JPG/WAV/MP3 are now allowed via -f in assets/ — see below)
+assets/sprites/
+assets/vfx/
 
 # Debug
 main_debug.py

@@ -163,7 +163,7 @@ def get_gong_dage_moves(stats: CharacterStats) -> List[MoveData]:
         ),
         MoveData(
             name="爱国飞旗",
-            damage=int(60 * power_mult),
+            damage=int(30 * power_mult),
             hitbox_offset=(0, 0),
             hitbox_size=(0, 0),
             active_start=5,
@@ -176,7 +176,7 @@ def get_gong_dage_moves(stats: CharacterStats) -> List[MoveData]:
             effect_type="none",
             is_ranged=True,
             projectile_speed=6.0,
-            mana_cost=8
+            mana_cost=16
         ),
     ]
 
@@ -201,7 +201,7 @@ def get_junshi_moves(stats: CharacterStats) -> List[MoveData]:
         ),
         MoveData(
             name="激光枪射击",
-            damage=int(50 * power_mult),
+            damage=int(31 * power_mult),
             hitbox_offset=(0, 0),
             hitbox_size=(0, 0),
             active_start=4,
@@ -214,7 +214,7 @@ def get_junshi_moves(stats: CharacterStats) -> List[MoveData]:
             effect_type="burn",
             is_ranged=True,
             projectile_speed=14.0,
-            mana_cost=8
+            mana_cost=16
         ),
     ]
 
@@ -239,7 +239,7 @@ def get_shenmiren_moves(stats: CharacterStats) -> List[MoveData]:
         ),
         MoveData(
             name="叛国飞旗",
-            damage=int(45 * power_mult),
+            damage=int(22 * power_mult),
             hitbox_offset=(0, 0),
             hitbox_size=(0, 0),
             active_start=4,
@@ -252,7 +252,7 @@ def get_shenmiren_moves(stats: CharacterStats) -> List[MoveData]:
             effect_type="poison",
             is_ranged=True,
             projectile_speed=9.0,
-            mana_cost=8
+            mana_cost=16
         ),
     ]
 
@@ -277,7 +277,7 @@ def get_zitong_moves(stats: CharacterStats) -> List[MoveData]:
         ),
         MoveData(
             name="鹰击长空",
-            damage=int(40 * power_mult),
+            damage=int(18 * power_mult),
             hitbox_offset=(0, 0),
             hitbox_size=(0, 0),
             active_start=5,
@@ -290,7 +290,7 @@ def get_zitong_moves(stats: CharacterStats) -> List[MoveData]:
             effect_type="slow",
             is_ranged=True,
             projectile_speed=11.0,
-            mana_cost=8
+            mana_cost=16
         ),
     ]
 

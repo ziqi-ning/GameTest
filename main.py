@@ -7,6 +7,10 @@ from typing import Optional
 # 初始化Pygame
 pygame.init()
 
+# 预加载武器精灵（需要在 pygame.init() 之后）
+from assets.weapon_assets import WeaponAssets
+WeaponAssets.load_all()
+
 from config import SCREEN_WIDTH, SCREEN_HEIGHT, FPS, TITLE, Colors
 from game.game_state import GameState, RoundState, MatchResult
 from characters import get_character, CHARACTER_LIST
