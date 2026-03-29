@@ -6,6 +6,7 @@ from typing import Optional
 from entities.fighter import Fighter
 from config import GROUND_Y
 from constants import FighterState, Direction
+from game.state_machine import AnimationState
 
 class AIFighter(Fighter):
     """AI控制的角色"""
@@ -79,7 +80,7 @@ class AIFighter(Fighter):
             self.vel_y = -self.stats.jump_force
             self.on_ground = False
             self.state = FighterState.JUMP
-            self.animator.set_state("jump")
+            self.animator.set_state(AnimationState.JUMP)
 
     def should_block(self, opponent: Fighter, distance: float) -> bool:
         """判断是否应该防御"""
@@ -132,7 +133,7 @@ class AIFighter(Fighter):
             elif random.random() < 0.3:
                 self.attack_heavy()
             # 必杀技
-            elif (self.special_energy >= 100 and
+            elif (self.special_energy >= self.char_data.stats.special_cost and
                   random.random() < self.aggression * 0.2):
                 self.attack_special()
 

@@ -18,6 +18,9 @@ from ui.character_select import CharacterSelect
 from ui.fight_ui import FightUI, VictoryScreen
 from ui.timer import Timer, Announcement
 from stages.stage_1 import Stage1
+from effects.ultimate_effect import UltimateEffectManager
+from assets.screen_effects import ScreenEffects
+from assets.vfx_player import VFXPlayer
 
 class Game:
     """游戏主类"""
@@ -58,10 +61,14 @@ class Game:
         # 公告
         self.announcement = Announcement(SCREEN_WIDTH, SCREEN_HEIGHT)
 
-        # 屏幕震动
-        self.screen_shake = 0.0
-        self.shake_offset_x = 0
-        self.shake_offset_y = 0
+        # 终极必杀技特效管理器
+        self.ultimate_effect = UltimateEffectManager(SCREEN_WIDTH, SCREEN_HEIGHT)
+        self.last_special1_state = {}
+        self.last_special2_state = {}
+
+        # 史诗级屏幕特效系统
+        self.screen_effects = ScreenEffects()
+        self.vfx_player = VFXPlayer()
 
         # 模式
         self.is_vs_ai = True
@@ -146,17 +153,20 @@ class Game:
         elif self.state == GameState.ROUND_END:
             self.victory_screen.update(dt)
 
-        # 屏幕震动
-        if self.screen_shake > 0:
-            self.screen_shake -= dt * 30
-            self.shake_offset_x = (pygame.time.get_ticks() % 7) - 3
-            self.shake_offset_y = (pygame.time.get_ticks() % 5) - 2
-        else:
-            self.shake_offset_x = 0
-            self.shake_offset_y = 0
+        # 更新终极特效
+        self.ultimate_effect.update(dt)
+
+        # 更新屏幕特效系统
+        self.screen_effects.update(dt)
+        self.vfx_player.update(dt)
 
     def update_fight(self, dt: float):
         """更新战斗"""
+        # 如果终极特效正在播放，暂停游戏更新
+        if self.ultimate_effect.is_playing():
+            self.ultimate_effect.update(dt)
+            return
+
         # 回合状态
         if self.round_state == RoundState.READY:
             self.round_timer.pause()
@@ -184,9 +194,18 @@ class Game:
             light = key_pressed(pygame.K_j)
             heavy = key_pressed(pygame.K_k)
             special = key_pressed(pygame.K_l)
+            special_2 = key_pressed(pygame.K_i)
 
-            self.player1.handle_input(left, right, up, down, light, heavy, special, block)
+            self.player1.handle_input(left, right, up, down, light, heavy, special, special_2, block)
             self.player1.update(dt, self.player2)
+
+            # 检测终极必杀技释放（发动时一次性触发）
+            if self.player1.ultimate_pending_trigger:
+                self.player1.ultimate_pending_trigger = False
+                char_name = self.player1.char_data.stats.name_cn
+                direction = 1 if self.player1.facing_right else -1
+                self.ultimate_effect.trigger(char_name, "ultimate", direction)
+                self.player1.special_energy = 0
 
         # 玩家2输入
         if self.player2 and self.round_state == RoundState.FIGHT:
@@ -198,8 +217,18 @@ class Game:
                 p2_up = bool(keys[pygame.K_UP])
                 p2_down = bool(keys[pygame.K_DOWN])
                 p2_block = bool(keys[pygame.K_KP0])
-                self.player2.handle_input(p2_left, p2_right, p2_up, p2_down, False, False, False, p2_block)
+                p2_special = key_pressed(pygame.K_KP3)
+                p2_special_2 = key_pressed(pygame.K_PERIOD)
+                self.player2.handle_input(p2_left, p2_right, p2_up, p2_down, False, False, p2_special, p2_special_2, p2_block)
             self.player2.update(dt, self.player1)
+
+            # 检测终极必杀技释放
+            if self.player2.ultimate_pending_trigger:
+                self.player2.ultimate_pending_trigger = False
+                char_name = self.player2.char_data.stats.name_cn
+                direction = 1 if self.player2.facing_right else -1
+                self.ultimate_effect.trigger(char_name, "ultimate", direction)
+                self.player2.special_energy = 0
 
         # 检测胜负
         self.check_match_end()
@@ -207,13 +236,30 @@ class Game:
         # 更新UI
         self.fight_ui.update(dt, self.player1, self.player2)
 
-        # 屏幕震动
+        # ── 屏幕震动 & VFX 命中特效 ───────────────────────────────────
         if self.player1 and self.player1.screen_shake > 0:
-            self.screen_shake = max(self.screen_shake, self.player1.screen_shake)
+            # 将角色的震动信号转移到全局特效系统
+            self.screen_effects.shake(intensity=self.player1.screen_shake * 2.0, duration=0.25)
             self.player1.screen_shake = 0
         if self.player2 and self.player2.screen_shake > 0:
-            self.screen_shake = max(self.screen_shake, self.player2.screen_shake)
+            self.screen_effects.shake(intensity=self.player2.screen_shake * 2.0, duration=0.25)
             self.player2.screen_shake = 0
+
+        # 检测命中并触发VFX（通过命中特效计时器）
+        if self.player1 and self.player2:
+            # P2 被 P1 命中时
+            if hasattr(self.player2, 'last_hit_by') and self.player2.last_hit_by == 1:
+                self._spawn_hit_vfx(self.player2.x, self.player2.y - 50)
+                self.player2.last_hit_by = 0
+            # P1 被 P2 命中时
+            if hasattr(self.player1, 'last_hit_by') and self.player1.last_hit_by == 2:
+                self._spawn_hit_vfx(self.player1.x, self.player1.y - 50)
+                self.player1.last_hit_by = 0
+
+    def _spawn_hit_vfx(self, x: float, y: float):
+        """生成命中VFX特效"""
+        self.vfx_player.spawn_hit_cluster(x, y, intensity='medium')
+        self.screen_effects.epic_hit(intensity='medium', color='white')
 
     def start_match(self, p1_char: int, p2_char: int):
         """开始对战"""
@@ -227,15 +273,23 @@ class Game:
         # 获取角色数据并更新 UI 颜色
         p1_data = get_character(p1_char)
         p2_data = get_character(p2_char)
+
+        # 更新技能名称
+        p1_skills = [s.name_cn for s in p1_data.special] if p1_data.special else ["必杀1", "必杀2"]
+        p2_skills = [s.name_cn for s in p2_data.special] if p2_data.special else ["必杀1", "必杀2"]
+        self.fight_ui.set_skill_names(p1_skills, p2_skills)
+
         self.fight_ui.p1_health.character_color = p1_data.stats.color
         self.fight_ui.p1_health.secondary_color = p1_data.stats.secondary_color
         self.fight_ui.p1_health.health_high = p1_data.stats.color
         self.fight_ui.p1_health.health_med = p1_data.stats.secondary_color
+        self.fight_ui.p1_health.max_health = p1_data.stats.max_health
 
         self.fight_ui.p2_health.character_color = p2_data.stats.color
         self.fight_ui.p2_health.secondary_color = p2_data.stats.secondary_color
         self.fight_ui.p2_health.health_high = p2_data.stats.color
         self.fight_ui.p2_health.health_med = p2_data.stats.secondary_color
+        self.fight_ui.p2_health.max_health = p2_data.stats.max_health
 
         self.start_round()
 
@@ -327,19 +381,33 @@ class Game:
             if self.player2:
                 self.player2.draw(main_surface)
 
+            # 绘制VFX精灵动画（命中火花、斩击等）
+            self.vfx_player.draw(main_surface)
+
             p1_name = CHARACTER_LIST[self.p1_char_index]['name'] if hasattr(self, 'p1_char_index') else "P1"
             p2_name = CHARACTER_LIST[self.p2_char_index]['name'] if hasattr(self, 'p2_char_index') else "P2"
             self.fight_ui.draw(main_surface, p1_name, p2_name)
             self.announcement.draw(main_surface)
 
+            # 绘制终极必杀技特效
+            self.ultimate_effect.draw(main_surface)
+
+            # 绘制屏幕特效（色调变暗等覆盖层）
+            self.screen_effects.draw_overlay(main_surface)
+
             if self.state == GameState.ROUND_END:
                 self.victory_screen.draw(main_surface, p1_name, p2_name)
 
-        if self.shake_offset_x != 0 or self.shake_offset_y != 0:
+        # 应用屏幕震动偏移（新的特效系统）
+        sx, sy = self.screen_effects.get_shake_offset()
+        if sx != 0 or sy != 0:
             self.screen.fill((0, 0, 0))
-            self.screen.blit(main_surface, (self.shake_offset_x, self.shake_offset_y))
+            self.screen.blit(main_surface, (sx, sy))
         else:
             self.screen.blit(main_surface, (0, 0))
+
+        # 绘制闪光（始终在最上层）
+        self.screen_effects.draw_flash(self.screen)
 
 
 if __name__ == "__main__":

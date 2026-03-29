@@ -38,6 +38,7 @@ class Fighter:
         self.max_health = self.stats.max_health
         self.special_energy = 0
         self.max_special = 100
+        self.ultimate_pending_trigger: bool = False  # 必杀技已发动，等待触发终极特效
 
         # 状态
         self.state = FighterState.IDLE
@@ -57,11 +58,12 @@ class Fighter:
 
         # 特效系统
         self.effect_manager = EffectManager()
-        self.effect_func = CharacterEffects.get_effect_function(self.stats.name_cn)
+        self._char_effect_name = self.stats.name_cn
 
         # 攻击状态
         self.current_attack: Optional[MoveData] = None
         self.current_special: Optional[SpecialMoveData] = None
+        self.current_special_index: int = -1
         self.attack_frame = 0
         self.attack_cooldown = 0.0
         self.is_attacking = False
@@ -80,6 +82,7 @@ class Fighter:
         # 视觉特效
         self.hit_effect_timer = 0.0
         self.screen_shake = 0.0
+        self.last_hit_by = 0  # 被谁命中了（0=无, 1=P1, 2=P2）用于触发VFX
 
         # 特殊效果状态
         self.slow_timer = 0.0  # 减速效果
@@ -134,6 +137,25 @@ class Fighter:
             return (hitbox_x, hitbox_y, move.hitbox_size[0], move.hitbox_size[1])
 
         return None
+
+    def get_special_hitbox_rect(self) -> Optional[Tuple[float, float, float, float]]:
+        """获取当前必杀技攻击判定框"""
+        if not self.is_special_attacking or not self.current_special:
+            return None
+
+        move = self.current_special
+        dir_sign = 1 if self.facing_right else -1
+
+        if not (move.active_start <= self.attack_frame < move.active_start + move.active_frames):
+            return None
+
+        hitbox_x = self.x + move.hitbox_offset[0] * dir_sign - move.hitbox_size[0] // 2
+        hitbox_y = self.y - 120 + move.hitbox_offset[1]
+
+        if self.direction == Direction.LEFT:
+            hitbox_x = self.x - move.hitbox_offset[0] * dir_sign - move.hitbox_size[0] // 2
+
+        return (hitbox_x, hitbox_y, move.hitbox_size[0], move.hitbox_size[1])
 
     def handle_input(self, left: bool, right: bool, up: bool, down: bool,
                    light_attack: bool, heavy_attack: bool, special: bool, block: bool):
@@ -197,7 +219,7 @@ class Fighter:
         # 被动能量回复 (战斗中缓慢回复)
         if self.special_energy < self.max_special:
             self.special_energy = min(self.max_special,
-                                      self.special_energy + 3 * dt)  # 每秒回复3点能量
+                                      self.special_energy + 8 * dt)  # 每秒回复8点能量（够快）
 
         # 重力
         if not self.on_ground:
@@ -298,27 +320,34 @@ class Fighter:
             self.animator.set_state(AnimationState.ATTACK_HEAVY)
             self.vel_x = 0
 
-    def attack_special(self):
-        """必杀技"""
-        if self.special_energy < self.char_data.stats.special_cost:
+    def attack_special(self, move_index: int = 0):
+        """发动必杀技（move_index=0为第一个，=1为第二个）"""
+        if move_index >= len(self.char_data.special):
+            return  # 没有第二个必杀技
+
+        move = self.char_data.special[move_index]
+        if self.special_energy < move.energy_cost:
             return
         if self.is_attacking or self.hitstun_timer > 0:
             return
 
-        self.special_energy -= self.char_data.stats.special_cost
+        self.special_energy -= move.energy_cost
         self.is_attacking = True
         self.is_special_attacking = True
         self.attack_frame = 0
-        self.current_special = self.char_data.special[0]  # 使用第一个必杀技
+        self.current_special = move
+        self.current_special_index = move_index
         self.state = FighterState.ATTACK_SPECIAL
         self.animator.set_state(AnimationState.ATTACK_SPECIAL)
         self.vel_x = 0
         self.special_hit_count = 0
+        self.ultimate_pending_trigger = True  # 通知 main.py 触发终极特效
 
-        # 触发必杀技特效
-        if self.effect_func:
+        # 触发必杀技特效（按技能索引区分）
+        effect_func = CharacterEffects.get_effect_function(self._char_effect_name, move_index)
+        if effect_func:
             effect_x = self.x + (50 if self.facing_right else -50)
-            self.effect_func(self.effect_manager, effect_x, self.y - 50, self.current_special.name_cn)
+            effect_func(self.effect_manager, effect_x, self.y - 50, move.name_cn)
 
     def update_attack(self, dt: float, opponent: Optional['Fighter'] = None):
         """更新攻击状态"""
@@ -389,18 +418,14 @@ class Fighter:
 
         move = HitMoveData(move_data)
 
-        # 计算判定框位置
-        dir = self.direction
+        # 计算判定框位置（统一用 facing_right 处理方向）
+        dir_sign = 1 if self.facing_right else -1
         # 只在active帧期间显示判定框
         if not (move.active_start <= self.attack_frame < move.active_start + move.active_frames):
             return
 
-        hitbox_x = self.x + move.hitbox_offset[0] * dir - move.hitbox_size[0] // 2
+        hitbox_x = self.x + move.hitbox_offset[0] * dir_sign - move.hitbox_size[0] // 2
         hitbox_y = self.y - 120 + move.hitbox_offset[1]
-
-        # 翻转x坐标
-        if dir == Direction.LEFT:
-            hitbox_x = self.x - move.hitbox_offset[0] * dir - move.hitbox_size[0] // 2
 
         hitbox_rect = (hitbox_x, hitbox_y, move.hitbox_size[0], move.hitbox_size[1])
 
@@ -421,17 +446,28 @@ class Fighter:
                 self.apply_hit(opponent, move_data)
 
                 # 触发命中特效
-                if self.effect_func:
+                effect_func = CharacterEffects.get_effect_function(self._char_effect_name, -1)
+                if effect_func:
                     effect_x = opponent.x
-                    self.effect_func(self.effect_manager, effect_x, opponent.y - 50, move_data.name)
+                    effect_func(self.effect_manager, effect_x, opponent.y - 50, move_data.name)
 
     def apply_hit(self, opponent: 'Fighter', move):
         """应用命中效果"""
+        # 根据是否必杀技确定攻击倍率
+        if self.is_special_attacking:
+            attack_type = 'special'
+        elif 'light' in move.name.lower():
+            attack_type = 'light'
+        elif 'heavy' in move.name.lower():
+            attack_type = 'heavy'
+        else:
+            attack_type = 'light'
+
         # 计算伤害
         damage = calculate_damage(
             self.stats.attack_power,
             opponent.stats.defense,
-            get_attack_multiplier(move.name.split('_')[0]),
+            get_attack_multiplier(attack_type),
             1.0,
             self.combat.combo_count
         )
@@ -442,19 +478,24 @@ class Fighter:
         # 更新连击
         combo_count = self.combat.register_hit(damage, move.name)
 
-        # 更新能量 (根据攻击类型)
-        if 'light' in move.name:
-            energy_type = 'light'
-        elif 'heavy' in move.name:
-            energy_type = 'heavy'
-        else:
-            energy_type = 'light'
+        # 更新能量
         self.special_energy = min(self.max_special,
-                                  self.special_energy + calculate_special_energy_gain(damage, energy_type))
+                                  self.special_energy + calculate_special_energy_gain(damage, attack_type))
 
         # 视觉效果
         opponent.hit_effect_timer = 0.2
+        opponent.last_hit_by = self.player_id  # 标记被谁命中
         self.screen_shake = 5
+
+        # 显示伤害数字
+        is_special = self.is_special_attacking
+        dmg_color = (255, 200, 50) if is_special else (255, 80, 80)
+        dmg_size = 44 if is_special else 36
+        dmg_prefix = "★ " if is_special else ""
+        opponent.effect_manager.add_text(
+            f"{dmg_prefix}{damage}",
+            opponent.x, opponent.y - 120, dmg_color, dmg_size, 1.2
+        )
 
     def apply_blocked_hit(self, opponent: 'Fighter', move):
         """应用被防御的命中"""
@@ -467,6 +508,28 @@ class Fighter:
 
         # 减少能量
         opponent.special_energy = max(0, opponent.special_energy - 5)
+
+        # 显示被防御的伤害数字
+        if self.is_special_attacking:
+            attack_type = 'special'
+        elif 'light' in move.name.lower():
+            attack_type = 'light'
+        elif 'heavy' in move.name.lower():
+            attack_type = 'heavy'
+        else:
+            attack_type = 'light'
+        damage = calculate_damage(
+            self.stats.attack_power,
+            opponent.stats.defense,
+            get_attack_multiplier(attack_type),
+            1.0,
+            self.combat.combo_count
+        )
+        block_damage = int(damage * 0.3)
+        opponent.effect_manager.add_text(
+            f"{block_damage}",
+            opponent.x, opponent.y - 120, (160, 160, 255), 32, 1.0
+        )
 
     def take_damage(self, damage: int, knockback: float, knockback_up: float, direction: int):
         """承受伤害"""
@@ -530,6 +593,73 @@ class Fighter:
         else:
             self.direction = Direction.LEFT
 
+    def _draw_attack_range(self, surface: pygame.Surface, camera_x: int):
+        """绘制攻击范围判定框可视化"""
+        hitbox_rect = None
+        move_name = ""
+
+        if self.is_special_attacking and self.current_special:
+            hitbox_rect = self.get_special_hitbox_rect()
+            if hitbox_rect:
+                move_name = self.current_special.name_cn
+                color = (255, 200, 50, 120)   # 金色 - 必杀技
+                border_color = (255, 220, 80)
+        elif self.is_attacking and self.current_attack:
+            hitbox_rect = self.get_hitbox_rect()
+            if hitbox_rect:
+                move_name = self.current_attack.name
+                # 根据当前攻击状态选择颜色（轻攻击/重攻击）
+                state_str = str(self.state)
+                if 'light' in state_str:
+                    color = (255, 100, 100, 80)     # 红色 - 轻攻击
+                    border_color = (255, 150, 150)
+                elif 'heavy' in state_str:
+                    color = (100, 100, 255, 80)     # 蓝色 - 重攻击
+                    border_color = (150, 150, 255)
+                else:
+                    color = (255, 180, 100, 80)     # 橙色 - 普通
+                    border_color = (255, 200, 150)
+
+        if hitbox_rect:
+            x, y, w, h = hitbox_rect
+            x -= camera_x
+
+            # 创建半透明填充
+            s = pygame.Surface((int(w), int(h)), pygame.SRCALPHA)
+            s.fill(color)
+            surface.blit(s, (int(x), int(y)))
+
+            # 绘制边框
+            pygame.draw.rect(surface, border_color, (int(x), int(y), int(w), int(h)), 2)
+
+            # 绘制角标（表示这是攻击判定框）
+            corner_size = 6
+            # 左上角
+            pygame.draw.line(surface, border_color, (x, y + corner_size), (x, y), 3)
+            pygame.draw.line(surface, border_color, (x + corner_size, y), (x, y), 3)
+            # 右上角
+            pygame.draw.line(surface, border_color, (x + w - corner_size, y), (x + w, y), 3)
+            pygame.draw.line(surface, border_color, (x + w, y + corner_size), (x + w, y), 3)
+            # 左下角
+            pygame.draw.line(surface, border_color, (x, y + h - corner_size), (x, y + h), 3)
+            pygame.draw.line(surface, border_color, (x + corner_size, y + h), (x, y + h), 3)
+            # 右下角
+            pygame.draw.line(surface, border_color, (x + w - corner_size, y + h), (x + w, y + h), 3)
+            pygame.draw.line(surface, border_color, (x + w, y + h - corner_size), (x + w, y + h), 3)
+
+            # 在判定框上方显示攻击类型
+            if move_name:
+                try:
+                    font = pygame.font.SysFont("microsoftyahei", 14, bold=True)
+                except:
+                    font = pygame.font.Font(None, 14)
+                text_surf = font.render(move_name, True, border_color)
+                text_surf.set_alpha(200)
+                tx = x + w // 2 - text_surf.get_width() // 2
+                ty = y - text_surf.get_height() - 2
+                if ty >= 0:
+                    surface.blit(text_surf, (int(tx), int(ty)))
+
     def draw(self, surface: pygame.Surface, camera_x: int = 0):
         """绘制角色"""
         from animation.sprite_loader import get_sprite
@@ -573,6 +703,9 @@ class Fighter:
             pygame.draw.circle(surface, (255, 200, 50),
                              (int(self.x - camera_x), int(self.y - 80)), 20, 3)
 
+        # 绘制攻击范围判定框（hitbox可视化）
+        self._draw_attack_range(surface, camera_x)
+
         # 绘制护盾
         if self.shield_value > 0:
             shield_alpha = min(100, self.shield_value // 3)
@@ -591,6 +724,7 @@ class Fighter:
         self.vel_y = 0
         self.health = self.max_health
         self.special_energy = 0
+        self.ultimate_pending_trigger = False
         self.state = FighterState.IDLE
         self.is_blocking = False
         self.block_input = False
@@ -599,6 +733,7 @@ class Fighter:
         self.is_special_attacking = False
         self.current_attack = None
         self.current_special = None
+        self.current_special_index = -1
         self.hitstun_timer = 0
         self.combat.reset()
         self.animator.reset()

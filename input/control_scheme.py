@@ -5,7 +5,7 @@ import pygame
 # 导出预定义的控制方案
 __all__ = ['PLAYER_1', 'PLAYER_2', 'get_player_controls', 'DEFAULT_CONTROLS']
 
-# 玩家1 - WASD + JKL
+# 玩家1 - WASD + JKL / I
 PLAYER_1 = {
     'left': pygame.K_a,
     'right': pygame.K_d,
@@ -13,7 +13,8 @@ PLAYER_1 = {
     'down': pygame.K_s,
     'light_attack': pygame.K_j,
     'heavy_attack': pygame.K_k,
-    'special': pygame.K_l,
+    'special': pygame.K_l,       # 必杀技1
+    'special_2': pygame.K_i,     # 必杀技2
     'block': pygame.K_u,
 }
 
@@ -25,7 +26,8 @@ PLAYER_2 = {
     'down': pygame.K_DOWN,
     'light_attack': pygame.K_KP1,
     'heavy_attack': pygame.K_KP2,
-    'special': pygame.K_KP3,
+    'special': pygame.K_KP3,        # 必杀技1
+    'special_2': pygame.K_PERIOD,  # 必杀技2（小键盘 .）
     'block': pygame.K_KP0,
 }
 

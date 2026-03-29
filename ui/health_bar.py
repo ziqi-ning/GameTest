@@ -1,5 +1,6 @@
 # 血条UI组件
 
+import math
 import pygame
 from typing import Tuple
 
@@ -239,3 +240,196 @@ class ComboDisplay:
         # 绘制文字
         text.set_alpha(alpha)
         surface.blit(text, (x, y))
+
+
+class SkillBar:
+    """双技能槽UI - 华丽版"""
+
+    def __init__(self, x: int, y: int, is_player1: bool = True,
+                 skill1_color: Tuple[int, int, int] = (255, 100, 100),
+                 skill2_color: Tuple[int, int, int] = (100, 200, 255)):
+        self.x = x
+        self.y = y
+        self.is_player1 = is_player1
+        self.skill1_color = skill1_color
+        self.skill2_color = skill2_color
+
+        # 技能槽尺寸
+        self.slot_width = 50
+        self.slot_height = 50
+        self.slot_spacing = 8
+
+        # 能量
+        self.skill1_energy = 0
+        self.skill2_energy = 0
+        self.max_energy = 100
+
+        # 动画
+        self.slot1_glow = 0.0
+        self.slot2_glow = 0.0
+        self.pulse_time = 0.0
+
+        # 冷却/充能动画
+        self.skill1_cooling = False
+        self.skill2_cooling = False
+        self.cooldown_timer = 0.0
+
+    def set_energy(self, skill1: int, skill2: int):
+        """设置两个技能的能量"""
+        self.skill1_energy = max(0, min(skill1, self.max_energy))
+        self.skill2_energy = max(0, min(skill2, self.max_energy))
+
+    def trigger_cooldown(self, skill_index: int, duration: float):
+        """触发技能冷却"""
+        if skill_index == 0:
+            self.skill1_cooling = True
+            self.skill1_energy = 0
+        else:
+            self.skill2_cooling = True
+            self.skill2_energy = 0
+        self.cooldown_timer = duration
+
+    def update(self, dt: float):
+        """更新动画"""
+        self.pulse_time += dt
+
+        # 更新发光效果
+        if self.skill1_energy >= self.max_energy:
+            self.slot1_glow = 0.5 + 0.5 * abs(math.sin(self.pulse_time * 4))
+        else:
+            self.slot1_glow = 0.0
+
+        if self.skill2_energy >= self.max_energy:
+            self.slot2_glow = 0.5 + 0.5 * abs(math.sin(self.pulse_time * 4 + math.pi))
+        else:
+            self.slot2_glow = 0.0
+
+        # 更新冷却
+        if self.cooldown_timer > 0:
+            self.cooldown_timer -= dt
+            if self.cooldown_timer <= 0:
+                self.skill1_cooling = False
+                self.skill2_cooling = False
+
+    def draw(self, surface: pygame.Surface, skill1_name: str = "必杀1", skill2_name: str = "必杀2"):
+        """绘制技能槽"""
+
+        # 计算位置
+        if self.is_player1:
+            x1 = self.x
+            x2 = self.x + self.slot_width + self.slot_spacing
+        else:
+            x1 = self.x - self.slot_width - self.slot_spacing
+            x2 = self.x
+
+        # 绘制技能1
+        self._draw_skill_slot(surface, x1, self.y, self.slot_width, self.slot_height,
+                             self.skill1_energy, self.skill1_color, self.slot1_glow,
+                             skill1_name, "1", self.skill1_cooling, self.cooldown_timer)
+
+        # 绘制技能2
+        self._draw_skill_slot(surface, x2, self.y, self.slot_width, self.slot_height,
+                             self.skill2_energy, self.skill2_color, self.slot2_glow,
+                             skill2_name, "2", self.skill2_cooling, self.cooldown_timer)
+
+    def _draw_skill_slot(self, surface: pygame.Surface, x: int, y: int, w: int, h: int,
+                        energy: int, base_color: Tuple[int, int, int], glow: float,
+                        name: str, key: str, cooling: bool, cooldown_time: float):
+        """绘制单个技能槽"""
+
+        # 外发光效果
+        if glow > 0:
+            glow_radius = int(10 * glow)
+            glow_surface = pygame.Surface((w + glow_radius * 2, h + glow_radius * 2), pygame.SRCALPHA)
+            glow_color = (*base_color, int(100 * glow))
+            pygame.draw.rect(glow_surface, glow_color,
+                            (glow_radius - 2, glow_radius - 2, w + 4, h + 4),
+                            border_radius=8)
+            surface.blit(glow_surface, (x - glow_radius, y - glow_radius))
+
+        # 背景框
+        bg_color = (30, 30, 40) if not cooling else (50, 30, 30)
+        pygame.draw.rect(surface, bg_color, (x, y, w, h), border_radius=6)
+
+        # 能量填充
+        energy_ratio = energy / self.max_energy
+        fill_height = int(h * energy_ratio)
+
+        if fill_height > 0:
+            # 渐变色填充
+            for i in range(fill_height):
+                ratio = i / h
+                r = int(base_color[0] * (1 - ratio * 0.3))
+                g = int(base_color[1] * (1 - ratio * 0.3))
+                b = int(base_color[2] * (1 - ratio * 0.3))
+                pygame.draw.line(surface, (r, g, b), (x + 2, y + h - i - 1), (x + w - 2, y + h - i - 1))
+
+        # 冷却遮罩
+        if cooling and cooldown_time > 0:
+            cooldown_ratio = cooldown_time / 2.0  # 假设2秒冷却
+            cover_height = int(h * cooldown_ratio)
+            cover = pygame.Surface((w, cover_height), pygame.SRCALPHA)
+            cover.fill((0, 0, 0, 180))
+            surface.blit(cover, (x, y))
+
+        # 边框 - 就绪时发光
+        if energy >= self.max_energy and not cooling:
+            border_color = base_color
+            # 闪烁效果
+            pulse = abs(math.sin(self.pulse_time * 6))
+            border_width = 2 + int(pulse * 2)
+        else:
+            border_color = (80, 80, 100)
+            border_width = 2
+
+        pygame.draw.rect(surface, border_color, (x, y, w, h), border_width, border_radius=6)
+
+        # 技能图标区域
+        icon_size = 20
+        icon_x = x + (w - icon_size) // 2
+        icon_y = y + 8
+
+        # 绘制简单图标形状
+        if "爱国" in name or "护盾" in name:
+            # 盾牌形状
+            points = [(icon_x + icon_size//2, icon_y),
+                     (icon_x + icon_size - 2, icon_y + 4),
+                     (icon_x + icon_size - 2, icon_y + icon_size - 6),
+                     (icon_x + icon_size//2, icon_y + icon_size - 2),
+                     (icon_x + 2, icon_y + icon_size - 6),
+                     (icon_x + 2, icon_y + 4)]
+            pygame.draw.polygon(surface, base_color, points)
+        elif "实验室" in name:
+            # 魔法球形状
+            pygame.draw.circle(surface, base_color, (icon_x + icon_size//2, icon_y + icon_size//2), icon_size//2 - 2)
+            pygame.draw.circle(surface, (255, 255, 255), (icon_x + icon_size//2 - 3, icon_y + icon_size//2 - 3), 4)
+        elif "叛国" in name:
+            # 匕首形状
+            pygame.draw.line(surface, base_color,
+                           (icon_x + 4, icon_y + icon_size - 4),
+                           (icon_x + icon_size - 4, icon_y + 4), 3)
+            pygame.draw.circle(surface, base_color, (icon_x + icon_size - 4, icon_y + 4), 4)
+        elif "雕" in name:
+            # 羽毛形状
+            points = [(icon_x + icon_size//2, icon_y),
+                     (icon_x + icon_size - 4, icon_y + icon_size),
+                     (icon_x + icon_size//2, icon_y + icon_size - 6),
+                     (icon_x + 4, icon_y + icon_size)]
+            pygame.draw.polygon(surface, base_color, points)
+        else:
+            # 默认星星
+            pygame.draw.circle(surface, base_color, (icon_x + icon_size//2, icon_y + icon_size//2), icon_size//2 - 2)
+
+        # 按键提示
+        font_size = 14
+        font = pygame.font.SysFont("arial", font_size, bold=True)
+        key_text = font.render(key, True, (255, 255, 255))
+        key_rect = key_text.get_rect(center=(x + w - 10, y + h - 10))
+        surface.blit(key_text, key_rect)
+
+        # 就绪状态 "RDY" 文字
+        if energy >= self.max_energy and not cooling:
+            ready_font = pygame.font.SysFont("arial", 10, bold=True)
+            ready_text = ready_font.render("RDY", True, (255, 255, 0))
+            ready_rect = ready_text.get_rect(center=(x + w//2, y + h - 8))
+            surface.blit(ready_text, ready_rect)

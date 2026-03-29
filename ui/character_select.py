@@ -4,6 +4,7 @@ import pygame
 import math
 from typing import Tuple, Optional
 from characters import CHARACTER_LIST
+from animation.sprite_loader import sprite_loader
 
 class CharacterSelect:
     """角色选择界面"""
@@ -132,9 +133,10 @@ class CharacterSelect:
             pygame.draw.rect(surface, (30, 30, 50), (x, y, char_width, char_height))
             pygame.draw.rect(surface, border_color, (x, y, char_width, char_height), border_width)
 
-            # 角色头像（程序化生成）
+            # 角色头像（使用真实精灵）
             self._draw_character_preview(surface, x + char_width // 2, y + 100,
-                                       char_info['color'], is_p1_selected or is_p2_selected)
+                                       char_info['id'], char_info['color'],
+                                       is_p1_selected or is_p2_selected)
 
             # 角色名
             name = self.name_font.render(char_info['name'], True, (255, 255, 255))
@@ -176,32 +178,33 @@ class CharacterSelect:
         surface.blit(hint_text, hint_rect)
 
     def _draw_character_preview(self, surface: pygame.Surface, cx: int, cy: int,
-                               color: Tuple[int, int, int], selected: bool):
-        """绘制角色预览"""
-        # 角色轮廓
+                               char_index: int, color: Tuple[int, int, int], selected: bool):
+        """绘制角色预览（使用真实精灵）"""
         bounce = self.bounce_offset if selected else 0
 
-        # 头部
-        pygame.draw.circle(surface, color, (cx, cy - 40 + bounce), 30)
-        pygame.draw.circle(surface, (240, 220, 200), (cx, cy - 40 + bounce), 25)
-
-        # 身体
-        body_rect = (cx - 25, cy - 10 + bounce, 50, 60)
-        pygame.draw.ellipse(surface, color, body_rect)
-
-        # 手臂
-        if selected:
-            # 选中时挥手
-            angle = math.sin(self.cursor_flash) * 0.3
-            pygame.draw.line(surface, color, (cx - 25, cy + bounce), (cx - 45, cy - 20 + int(20 * angle) + bounce), 10)
-            pygame.draw.line(surface, color, (cx + 25, cy + bounce), (cx + 45, cy - 20 + int(-20 * angle) + bounce), 10)
+        # 尝试加载真实精灵帧
+        sprite = sprite_loader.get_sprite_frame(char_index, 'idle', 0, True)
+        if sprite:
+            # 翻转角色朝向（面向中心）
+            sprite_flipped = pygame.transform.flip(sprite, True, False)
+            # 上下弹跳效果
+            draw_y = cy - sprite_flipped.get_height() // 2 + int(bounce)
+            surface.blit(sprite_flipped, (cx - sprite_flipped.get_width() // 2, draw_y))
         else:
-            pygame.draw.line(surface, color, (cx - 25, cy + bounce), (cx - 40, cy + 30 + bounce), 10)
-            pygame.draw.line(surface, color, (cx + 25, cy + bounce), (cx + 40, cy + 30 + bounce), 10)
-
-        # 腿
-        pygame.draw.line(surface, (50, 50, 80), (cx - 15, cy + 50 + bounce), (cx - 15, cy + 90 + bounce), 12)
-        pygame.draw.line(surface, (50, 50, 80), (cx + 15, cy + 50 + bounce), (cx + 15, cy + 90 + bounce), 12)
+            # 降级：绘制简单几何图形
+            pygame.draw.circle(surface, color, (cx, cy - 40 + bounce), 30)
+            pygame.draw.circle(surface, (240, 220, 200), (cx, cy - 40 + bounce), 25)
+            body_rect = (cx - 25, cy - 10 + bounce, 50, 60)
+            pygame.draw.ellipse(surface, color, body_rect)
+            if selected:
+                angle = math.sin(self.cursor_flash) * 0.3
+                pygame.draw.line(surface, color, (cx - 25, cy + bounce), (cx - 45, cy - 20 + int(20 * angle) + bounce), 10)
+                pygame.draw.line(surface, color, (cx + 25, cy + bounce), (cx + 45, cy - 20 + int(-20 * angle) + bounce), 10)
+            else:
+                pygame.draw.line(surface, color, (cx - 25, cy + bounce), (cx - 40, cy + 30 + bounce), 10)
+                pygame.draw.line(surface, color, (cx + 25, cy + bounce), (cx + 40, cy + 30 + bounce), 10)
+            pygame.draw.line(surface, (50, 50, 80), (cx - 15, cy + 50 + bounce), (cx - 15, cy + 90 + bounce), 12)
+            pygame.draw.line(surface, (50, 50, 80), (cx + 15, cy + 50 + bounce), (cx + 15, cy + 90 + bounce), 12)
 
     def _draw_character_details(self, surface: pygame.Surface, char_info: dict,
                                x: int, y: int, is_p1: bool):
