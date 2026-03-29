@@ -193,8 +193,8 @@ def get_junshi_moves(stats: CharacterStats) -> List[MoveData]:
         MoveData(
             name="实验室冲击波",
             damage=int(35 * power_mult),
-            hitbox_offset=(100, 20),
-            hitbox_size=(150, 50),
+            hitbox_offset=(55, 25),
+            hitbox_size=(65, 45),
             active_start=3,
             active_frames=4,
             recovery_frames=4,
@@ -301,7 +301,9 @@ def get_zitong_moves(stats: CharacterStats) -> List[MoveData]:
 
 
 def get_gong_dage_special(stats: CharacterStats) -> List[SpecialMoveData]:
-    """龚大哥的必杀技 - 爱国系列"""
+    """龚大哥的必杀技 - 爱国系列
+    L键(0)：爱国之心 - 伤害：近战爆发+眩晕
+    I键(1)：爱国护盾 - 增益：生成护盾"""
     power_mult = stats.attack_power / 80.0
     return [
         SpecialMoveData(
@@ -335,13 +337,15 @@ def get_gong_dage_special(stats: CharacterStats) -> List[SpecialMoveData]:
             knockback=0,
             effect_type="shield",
             effect_duration=3.0,
-            effect_value=300
+            effect_value=300  # 护盾值
         ),
     ]
 
 
 def get_junshi_special(stats: CharacterStats) -> List[SpecialMoveData]:
-    """军师的必杀技 - 实验室系列"""
+    """军师的必杀技 - 实验室系列
+    L键(0)：实验室终极射线 - 伤害：近战能量爆发+灼烧
+    I键(1)：实验室强化 - 增益：5连发激光枪，持续10秒"""
     power_mult = stats.attack_power / 80.0
     return [
         SpecialMoveData(
@@ -362,27 +366,28 @@ def get_junshi_special(stats: CharacterStats) -> List[SpecialMoveData]:
             effect_value=30
         ),
         SpecialMoveData(
-            name="实验室召唤",
-            name_cn="实验室召唤",
-            damage=int(150 * power_mult),
+            name="实验室强化",
+            name_cn="实验室强化",
+            damage=0,
             energy_cost=80,
-            hitbox_offset=(100, 0),
-            hitbox_size=(200, 100),
-            active_start=8,
-            active_frames=10,
-            total_frames=25,
-            hitstun=25,
-            knockback=18,
-            knockback_up=6,
-            projectile=True,
-            projectile_speed=15,
-            effect_type="burn"
+            hitbox_offset=(0, 0),
+            hitbox_size=(0, 0),
+            active_start=0,
+            active_frames=0,
+            total_frames=20,
+            hitstun=0,
+            knockback=0,
+            effect_type="multi_shot",
+            effect_duration=7.0,  # 7秒
+            effect_value=5  # 5连发
         ),
     ]
 
 
 def get_shenmiren_special(stats: CharacterStats) -> List[SpecialMoveData]:
-    """神秘人的必杀技 - 叛国系列"""
+    """神秘人的必杀技 - 叛国系列
+    L键(0)：叛国瞬斩 - 伤害：近战瞬移斩击
+    I键(1)：叛国血脉 - 增益：吸血效果，攻击伤害的1/3回复生命，持续10秒"""
     power_mult = stats.attack_power / 80.0
     return [
         SpecialMoveData(
@@ -402,46 +407,30 @@ def get_shenmiren_special(stats: CharacterStats) -> List[SpecialMoveData]:
             effect_duration=0.5
         ),
         SpecialMoveData(
-            name="叛国诅咒",
-            name_cn="叛国诅咒",
-            damage=int(120 * power_mult),
+            name="叛国血脉",
+            name_cn="叛国血脉",
+            damage=0,
             energy_cost=80,
-            hitbox_offset=(60, 20),
-            hitbox_size=(100, 80),
-            active_start=5,
-            active_frames=10,
-            total_frames=22,
-            hitstun=18,
-            knockback=12,
-            knockback_up=3,
-            effect_type="curse",
-            effect_duration=5.0,
-            effect_value=0.5  # 降低50%攻击
+            hitbox_offset=(0, 0),
+            hitbox_size=(0, 0),
+            active_start=0,
+            active_frames=0,
+            total_frames=20,
+            hitstun=0,
+            knockback=0,
+            effect_type="lifesteal",
+            effect_duration=10.0,
+            effect_value=0.33  # 33%吸血
         ),
     ]
 
 
 def get_zitong_special(stats: CharacterStats) -> List[SpecialMoveData]:
-    """籽桐的必杀技 - 雕系列"""
+    """籽桐的必杀技 - 雕系列
+    L键(0)：雕羽风暴 - 伤害：近战多段打击羽毛乱舞
+    I键(1)：冰雕凝视 - 减益：强制冻结敌人10秒"""
     power_mult = stats.attack_power / 80.0
     return [
-        SpecialMoveData(
-            name="雕之领域",
-            name_cn="雕之领域",
-            damage=int(140 * power_mult),
-            energy_cost=80,
-            hitbox_offset=(50, 0),
-            hitbox_size=(250, 150),
-            active_start=6,
-            active_frames=12,
-            total_frames=26,
-            hitstun=22,
-            knockback=10,
-            knockback_up=3,
-            effect_type="slow_field",
-            effect_duration=4.0,
-            effect_value=0.5  # 减速50%
-        ),
         SpecialMoveData(
             name="雕羽风暴",
             name_cn="雕羽风暴",
@@ -458,5 +447,21 @@ def get_zitong_special(stats: CharacterStats) -> List[SpecialMoveData]:
             effect_type="multi_hit",
             effect_duration=0,
             effect_value=5  # 多次打击
+        ),
+        SpecialMoveData(
+            name="冰雕凝视",
+            name_cn="冰雕凝视",
+            damage=0,
+            energy_cost=80,
+            hitbox_offset=(0, 0),
+            hitbox_size=(0, 0),
+            active_start=0,
+            active_frames=0,
+            total_frames=25,
+            hitstun=0,
+            knockback=0,
+            effect_type="freeze",
+            effect_duration=5.0,  # 5秒
+            effect_value=0  # 无伤害，只冻结
         ),
     ]

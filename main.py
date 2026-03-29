@@ -7,10 +7,6 @@ from typing import Optional
 # 初始化Pygame
 pygame.init()
 
-# 预加载武器精灵（需要在 pygame.init() 之后）
-from assets.weapon_assets import WeaponAssets
-WeaponAssets.load_all()
-
 from config import SCREEN_WIDTH, SCREEN_HEIGHT, FPS, TITLE, Colors
 from game.game_state import GameState, RoundState, MatchResult
 from characters import get_character, CHARACTER_LIST
@@ -200,8 +196,9 @@ class Game:
             special = key_pressed(pygame.K_l)
             special_2 = key_pressed(pygame.K_i)
 
-            self.player1.handle_input(left, right, up, down, light, heavy, special, special_2, block)
+            # 先update更新_opponent_ref，再处理输入
             self.player1.update(dt, self.player2)
+            self.player1.handle_input(left, right, up, down, light, heavy, special, special_2, block)
 
             # 检测终极必杀技释放（发动时一次性触发）
             if self.player1.ultimate_pending_trigger:
@@ -214,7 +211,8 @@ class Game:
         # 玩家2输入
         if self.player2 and self.round_state == RoundState.FIGHT:
             if self.is_vs_ai:
-                self.player2.update_ai(dt, self.player1)
+                # AI：先保存opponent引用，再调用update（包含AI逻辑和timer更新）
+                self.player2.update(dt, self.player1)
             else:
                 p2_left = bool(keys[pygame.K_LEFT])
                 p2_right = bool(keys[pygame.K_RIGHT])
@@ -223,8 +221,9 @@ class Game:
                 p2_block = bool(keys[pygame.K_KP0])
                 p2_special = key_pressed(pygame.K_KP3)
                 p2_special_2 = key_pressed(pygame.K_PERIOD)
+                # 先update更新_opponent_ref，再处理输入
+                self.player2.update(dt, self.player1)
                 self.player2.handle_input(p2_left, p2_right, p2_up, p2_down, False, False, p2_special, p2_special_2, p2_block)
-            self.player2.update(dt, self.player1)
 
             # 检测终极必杀技释放
             if self.player2.ultimate_pending_trigger:

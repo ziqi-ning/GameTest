@@ -34,6 +34,9 @@ class AIFighter(Fighter):
         self.opponent_last_attack_time = 0
         self.opponent_attack_pattern = []
 
+        # 保存对手引用
+        self._opponent_ref = None
+
     def update_ai(self, dt: float, opponent: Fighter):
         """更新AI行为"""
         if opponent is None:
@@ -145,9 +148,16 @@ class AIFighter(Fighter):
 
     def update(self, dt: float, opponent: Fighter = None):
         """更新AI角色"""
+        # 保存对手引用
+        self._opponent_ref = opponent
+
         # 更新AI
         if opponent:
             self.update_ai(dt, opponent)
 
         # 更新基础逻辑
         super().update(dt, opponent)
+
+    def get_opponent(self):
+        """获取对手引用"""
+        return self._opponent_ref

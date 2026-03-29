@@ -99,6 +99,18 @@ class Fighter:
         self.stun_timer = 0.0  # 眩晕效果
         self.curse_timer = 0.0  # 诅咒效果（降低攻击）
         self.shield_value = 0  # 护盾值
+        self.max_shield = 300  # 最大护盾值（龚大哥）
+
+        # 增益效果状态（I键必杀技产生）
+        self.lifesteal_timer = 0.0  # 吸血效果持续时间
+        self.lifesteal_active = False  # 吸血是否激活
+        self.lifesteal_duration = 10.0  # 吸血持续时间
+        self.freeze_timer = 0.0  # 冻结敌人效果
+        self.freeze_target_id = 0  # 被冻结的目标ID
+
+        # 军师增益状态
+        self.junshi_multi_shot = 0  # 连发是否激活（0=未激活，1=激活）
+        self.junshi_multi_shot_timer = 0.0  # 连发倒计时
 
         # 装备必杀技
         if char_data.special:
@@ -182,19 +194,38 @@ class Fighter:
             self._update_projectiles(dt, opponent)
 
         # 更新特殊状态效果
-        if self.slow_timer > 0:
-            self.slow_timer -= dt
+        if self.freeze_timer > 0:
+            self.freeze_timer -= dt
+            self.stun_timer = 0  # 冻结时清除眩晕
         if self.stun_timer > 0:
             self.stun_timer -= dt
-            return  # 眩晕时不能动
-        if self.curse_timer > 0:
-            self.curse_timer -= dt
 
-        # 更新无敌时间
+        # 更新无敌时间（必须在所有状态检查之前，因为被攻击后也要能结束无敌）
         if self.invincible_timer > 0:
             self.invincible_timer -= dt
             if self.invincible_timer <= 0:
                 self.is_invincible = False
+
+        # 如果被冻结或眩晕，不能继续移动
+        if self.freeze_timer > 0 or self.stun_timer > 0:
+            return  # 冻结/眩晕时不能动
+        if self.slow_timer > 0:
+            self.slow_timer -= dt
+        if self.curse_timer > 0:
+            self.curse_timer -= dt
+
+        # 更新增益效果
+        # 神秘人吸血效果
+        if self.lifesteal_timer > 0:
+            self.lifesteal_timer -= dt
+            if self.lifesteal_timer <= 0:
+                self.lifesteal_active = False
+
+        # 军师连发效果
+        if self.junshi_multi_shot_timer > 0:
+            self.junshi_multi_shot_timer -= dt
+            if self.junshi_multi_shot_timer <= 0:
+                self.junshi_multi_shot = 0
 
         # 更新动画
         self.animator.update(dt)
@@ -343,12 +374,38 @@ class Fighter:
             self.animator.set_state(AnimationState.ATTACK_HEAVY)
             self.vel_x = 0
 
-            # 远程攻击：立即发射投射物
-            if move.is_ranged:
+            # 军师增益：5连发效果 - 7秒内每次K键都发射5颗
+            if "军师" in self._char_effect_name and self.junshi_multi_shot_timer > 0:
+                # 连续发射5颗子弹
+                from combat.special_moves import Projectile
+                move = self.char_data.moves[1]
+                dir_sign = 1 if self.facing_right else -1
+                for i in range(5):
+                    proj_x = self.x + 30 * dir_sign
+                    proj_y = self.y - 80 - i * 5  # 稍微偏移
+                    proj = Projectile(
+                        x=proj_x, y=proj_y,
+                        direction=dir_sign,
+                        speed=move.projectile_speed,
+                        damage=move.damage,
+                        owner_id=self.player_id,
+                        size=(60, 40)
+                    )
+                    proj.effect_type = move.effect_type
+                    proj.hitstun = move.hitstun
+                    proj.knockback = move.knockback
+                    proj.knockback_up = move.knockback_up
+                    proj.char_name = self._char_effect_name
+                    proj.ignore_invincible = True  # 忽略无敌，连发才能全中
+                    self.projectile_manager.projectiles.append(proj)
+                # 显示连发提示
+                self.effect_manager.add_text("5连发!", self.x, self.y - 200, (100, 200, 255), 32, 0.8)
+            elif move.is_ranged:
+                # 非军师或无连发buff时，发射正常投射物
                 self._fire_ranged_attack(move)
 
     def attack_special(self, move_index: int = 0):
-        """发动必杀技（move_index=0为第一个，=1为第二个）"""
+        """发动必杀技（L键=0伤害，I键=1增益）"""
         if move_index >= len(self.char_data.special):
             return  # 没有第二个必杀技
 
@@ -359,6 +416,27 @@ class Fighter:
             return
 
         self.special_energy -= move.energy_cost
+
+        # ── I键增益效果（move_index=1）─────────────────────
+        if move_index == 1:
+            # 尝试从Player获取opponent引用
+            opponent_ref = None
+            if hasattr(self, '_opponent_ref'):
+                opponent_ref = self._opponent_ref
+            if opponent_ref is None and opponent is not None:
+                opponent_ref = opponent
+            self._activate_buff_effect(move, opponent_ref)
+
+            # 增益不需要动画帧，直接结束
+            self.state = FighterState.IDLE
+            self.animator.set_state(AnimationState.IDLE)
+            self.is_attacking = False
+            self.is_special_attacking = False
+            self.current_special = None
+            self.attack_cooldown = 0.3
+            return
+
+        # ── L键伤害必杀技（move_index=0）─────────────────────
         self.is_attacking = True
         self.is_special_attacking = True
         self.attack_frame = 0
@@ -375,6 +453,69 @@ class Fighter:
         if effect_func:
             effect_x = self.x + (50 if self.facing_right else -50)
             effect_func(self.effect_manager, effect_x, self.y - 50, move.name_cn)
+
+    def _activate_buff_effect(self, move, opponent=None):
+        """激活增益效果（I键必杀技）"""
+        effect_type = move.effect_type
+        duration = move.effect_duration
+        value = move.effect_value
+
+        char_name = self._char_effect_name
+
+        # 龚大哥 - 护盾
+        if "龚大哥" in char_name and effect_type == "shield":
+            self.shield_value = int(value)  # value=300
+            self.max_shield = int(value)
+            self.effect_manager.add_text(
+                f"护盾 +{int(value)}",
+                self.x, self.y - 160, (100, 200, 255), 36, 2.0
+            )
+            self.effect_manager.add_ring(self.x, self.y - 80, 50, (100, 200, 255), 1.0)
+            self.effect_manager.add_particle_burst(self.x, self.y - 80, 15, (100, 200, 255), 5.0, 5.0)
+
+        # 军师 - 5连发
+        elif "军师" in char_name and effect_type == "multi_shot":
+            self.junshi_multi_shot = 1  # 激活连发
+            self.junshi_multi_shot_timer = duration  # 7秒
+            self.effect_manager.add_text(
+                f"5连发! {int(duration)}秒",
+                self.x, self.y - 160, (100, 150, 255), 36, 2.0
+            )
+            self.effect_manager.add_ring(self.x, self.y - 80, 60, (50, 100, 255), 1.2)
+            self.effect_manager.add_particle_burst(self.x, self.y - 80, 20, (100, 150, 255), 6.0, 5.0)
+
+        # 神秘人 - 吸血
+        elif "神秘人" in char_name and effect_type == "lifesteal":
+            self.lifesteal_active = True
+            self.lifesteal_timer = duration  # 10秒
+            heal_ratio = int(value * 100)  # 33%
+            self.effect_manager.add_text(
+                f"吸血 {heal_ratio}%! {int(duration)}秒",
+                self.x, self.y - 160, (180, 50, 200), 36, 2.0
+            )
+            self.effect_manager.add_ring(self.x, self.y - 80, 50, (180, 50, 200), 1.0)
+            self.effect_manager.add_particle_burst(self.x, self.y - 80, 15, (200, 100, 220), 5.0, 5.0)
+
+        # 籽桐 - 冻结敌人
+        elif "籽桐" in char_name and effect_type == "freeze":
+            self.effect_manager.add_text(
+                f"冰雕凝视! {int(duration)}秒",
+                self.x, self.y - 160, (50, 200, 255), 36, 2.0
+            )
+            self.effect_manager.add_ring(self.x, self.y - 80, 80, (50, 150, 255), 1.5)
+            self.effect_manager.add_particle_burst(self.x, self.y - 80, 25, (100, 200, 255), 8.0, 6.0)
+            # 冻结敌人
+            if opponent:
+                opponent.freeze_timer = duration
+                opponent.stun_timer = duration  # 冻结等同于眩晕
+                self.freeze_target_id = opponent.player_id
+                opponent.effect_manager.add_text(
+                    "冻结!",
+                    opponent.x, opponent.y - 150, (50, 200, 255), 40, 2.0
+                )
+                # 大范围冰冻特效
+                opponent.effect_manager.add_ring(opponent.x, opponent.y - 80, 60, (50, 150, 255), 1.5)
+                opponent.effect_manager.add_particle_burst(opponent.x, opponent.y - 80, 20, (100, 180, 255), 6.0, 6.0)
 
     def update_attack(self, dt: float, opponent: Optional['Fighter'] = None):
         """更新攻击状态"""
@@ -509,6 +650,20 @@ class Fighter:
         self.special_energy = min(self.max_special,
                                   self.special_energy + calculate_special_energy_gain(damage, attack_type))
 
+        # 神秘人吸血效果（攻击伤害的1/3回复生命）
+        if self.lifesteal_active and self.lifesteal_timer > 0:
+            heal_amount = damage // 3
+            if heal_amount > 0:
+                old_health = self.health
+                self.health = min(self.max_health, self.health + heal_amount)
+                actual_heal = self.health - old_health
+                if actual_heal > 0:
+                    self.effect_manager.add_text(
+                        f"+{actual_heal}",
+                        self.x, self.y - 150, (100, 255, 150), 28, 1.0
+                    )
+                    self.effect_manager.add_particle_burst(self.x, self.y - 80, 5, (100, 255, 150), 3.0, 3.0)
+
         # 视觉效果
         opponent.hit_effect_timer = 0.2
         opponent.last_hit_by = self.player_id  # 标记被谁命中
@@ -619,6 +774,56 @@ class Fighter:
             self.effect_manager.add_particle_burst(proj_x, proj_y, 7, (160, 120, 60), 3.0, 3.5)
             self.effect_manager.add_ring(proj_x, proj_y, 20, (100, 160, 80), 0.2)
 
+    def _schedule_junshi_multi_shot(self):
+        """调度军师连发效果：每0.5秒发射一颗额外子弹"""
+        # 军师连发效果通过定时器实现，在update中处理
+        # 这里设置剩余连发数量，倒计时在update中递减
+        pass
+
+    def _fire_junshi_multi_shots(self, shots: int):
+        """军师连发：每次K键发射多颗子弹"""
+        if shots > 0 and len(self.char_data.moves) > 1:
+            move = self.char_data.moves[1]  # K键的远程攻击
+            # 发射多颗子弹，稍微改变y位置模拟散射
+            for i in range(shots):
+                # 稍微偏移y位置
+                original_y = self.y
+                self.y -= 5  # 向上偏移一点
+                self._fire_ranged_attack(move)
+                self.y = original_y
+            # 显示连发提示
+            self.effect_manager.add_text(
+                f"5连发!",
+                self.x, self.y - 200, (100, 200, 255), 32, 0.8
+            )
+
+    def _fire_junshi_bonus_projectile(self):
+        """发射军师连发效果的额外投射物（兼容旧代码）"""
+        if self.junshi_multi_shot > 0 and len(self.char_data.moves) > 1:
+            move = self.char_data.moves[1]  # K键的远程攻击
+            self._fire_ranged_attack(move)
+            self.junshi_multi_shot -= 1
+            # 显示连发提示
+            self.effect_manager.add_text(
+                f"连发 x{self.junshi_multi_shot + 1}",
+                self.x, self.y - 180, (100, 200, 255), 24, 0.8
+            )
+
+    def freeze_opponent(self, opponent: 'Fighter', duration: float = 10.0):
+        """冻结敌人（籽桐I技能效果）"""
+        if opponent:
+            opponent.freeze_timer = duration
+            opponent.stun_timer = duration  # 冻结等同于长时间眩晕
+            self.freeze_target_id = opponent.player_id
+            opponent.effect_manager.add_text(
+                "冻结!",
+                opponent.x, opponent.y - 150, (50, 200, 255), 40, 2.0
+            )
+            # 大范围冰冻特效
+            opponent.effect_manager.add_ring(opponent.x, opponent.y - 80, 60, (50, 150, 255), 1.5)
+            opponent.effect_manager.add_ring(opponent.x, opponent.y - 80, 40, (150, 200, 255), 1.2)
+            opponent.effect_manager.add_particle_burst(opponent.x, opponent.y - 80, 20, (100, 180, 255), 6.0, 6.0)
+
     def _update_projectiles(self, dt: float, opponent: 'Fighter'):
         """更新所有投射物（移动 + 碰撞检测）"""
         from utils import clamp
@@ -651,7 +856,7 @@ class Fighter:
                     opponent.effect_manager.add_text(
                         "格挡", opponent.x, opponent.y - 100, (160, 160, 255), 28, 0.8
                     )
-                elif not opponent.is_invincible:
+                elif not opponent.is_invincible or proj.ignore_invincible:
                     # 应用伤害
                     opponent.take_damage(proj.damage, proj.knockback, proj.knockback_up, proj.direction)
                     # 显示伤害数字

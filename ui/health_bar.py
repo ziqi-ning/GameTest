@@ -23,6 +23,11 @@ class HealthBar:
         self.display_health = 1000  # 平滑显示
         self.smooth_speed = 8.0
 
+        # 护盾值
+        self.current_shield = 0
+        self.max_shield = 300
+        self.display_shield = 0
+
         # 角色颜色（用于渐变效果）
         self.character_color = character_color
         self.secondary_color = secondary_color
@@ -32,6 +37,7 @@ class HealthBar:
         self.health_high = character_color  # 使用角色主色
         self.health_med = secondary_color   # 使用角色次色
         self.health_low = (200, 30, 30)
+        self.shield_color = (100, 200, 255)  # 护盾颜色
         self.border_color = (80, 80, 100)
 
         # 字体
@@ -53,18 +59,32 @@ class HealthBar:
         """设置血量"""
         self.current_health = max(0, min(health, self.max_health))
 
+    def set_shield(self, shield: int, max_shield: int = 300):
+        """设置护盾值"""
+        self.current_shield = max(0, shield)
+        self.max_shield = max(1, max_shield)
+
     def update(self, dt: float):
         """更新血条显示（平滑过渡）"""
+        # 血量平滑
         if self.display_health > self.current_health:
-            # 血量下降
             self.display_health -= self.smooth_speed * dt * 100
             if self.display_health < self.current_health:
                 self.display_health = self.current_health
         elif self.display_health < self.current_health:
-            # 血量恢复
             self.display_health += self.smooth_speed * dt * 100
             if self.display_health > self.current_health:
                 self.display_health = self.current_health
+
+        # 护盾平滑
+        if self.display_shield > self.current_shield:
+            self.display_shield -= self.smooth_speed * dt * 150
+            if self.display_shield < self.current_shield:
+                self.display_shield = self.current_shield
+        elif self.display_shield < self.current_shield:
+            self.display_shield += self.smooth_speed * dt * 150
+            if self.display_shield > self.current_shield:
+                self.display_shield = self.current_shield
 
     def get_health_color(self) -> Tuple[int, int, int]:
         """根据血量获取颜色"""
@@ -77,12 +97,39 @@ class HealthBar:
             return self.health_low
 
     def draw(self, surface: pygame.Surface):
-        """绘制血条"""
+        """绘制血条和护盾"""
         # 背景
         pygame.draw.rect(surface, self.bg_color,
                         (self.x, self.y, self.width, self.height))
 
-        # 血量条
+        # ── 护盾条（在血条上方，护盾值>0时显示）─────────────────
+        if self.display_shield > 0:
+            shield_height = max(4, self.height // 5)
+            shield_y = self.y - shield_height - 2
+            shield_ratio = self.display_shield / self.max_shield
+            shield_width = int(self.width * shield_ratio)
+
+            if shield_width > 0:
+                if self.is_player1:
+                    pygame.draw.rect(surface, self.shield_color,
+                                  (self.x, shield_y, shield_width, shield_height))
+                    # 护盾高光
+                    pygame.draw.rect(surface, (150, 220, 255),
+                                  (self.x, shield_y, shield_width, 2))
+                else:
+                    pygame.draw.rect(surface, self.shield_color,
+                                  (self.x + self.width - shield_width, shield_y,
+                                   shield_width, shield_height))
+                    # 护盾高光
+                    pygame.draw.rect(surface, (150, 220, 255),
+                                  (self.x + self.width - shield_width, shield_y,
+                                   shield_width, 2))
+
+                # 护盾边框
+                pygame.draw.rect(surface, (80, 160, 200),
+                              (self.x, shield_y, self.width, shield_height), 1)
+
+        # ── 血量条 ────────────────────────────────────────────────
         health_ratio = self.display_health / self.max_health
         health_width = int(self.width * health_ratio)
 

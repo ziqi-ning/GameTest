@@ -21,6 +21,7 @@ class Player(Fighter):
             self.input = FighterInput(PLAYER_2)
 
         self.is_human = True
+        self._opponent_ref = None  # 保存对手引用用于必杀技
 
     def handle_input(self, left: bool, right: bool, up: bool, down: bool,
                    light_attack: bool, heavy_attack: bool,
@@ -41,6 +42,9 @@ class Player(Fighter):
 
     def update(self, dt: float, opponent: Optional[Fighter] = None):
         """更新玩家状态"""
+        # 保存对手引用
+        self._opponent_ref = opponent
+
         # 更新朝向
         if opponent:
             self.update_direction(opponent.x)
@@ -51,3 +55,7 @@ class Player(Fighter):
 
         # 调用父类更新
         super().update(dt, opponent)
+
+    def get_opponent(self):
+        """获取对手引用"""
+        return self._opponent_ref

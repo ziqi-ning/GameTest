@@ -1,6 +1,7 @@
 # 战斗界面UI
 
 import pygame
+import math
 from typing import Optional, Tuple
 
 class BuffDisplay:
@@ -21,11 +22,14 @@ class BuffDisplay:
             "poison": {"name": "中毒", "color": (150, 50, 200), "icon": "poison"},
             "curse": {"name": "诅咒", "color": (200, 50, 200), "icon": "skull"},
             "stun": {"name": "眩晕", "color": (255, 255, 100), "icon": "star"},
+            "freeze": {"name": "冻结", "color": (50, 200, 255), "icon": "ice"},
             "burn_field": {"name": "灼烧", "color": (255, 100, 50), "icon": "fire"},
             "slow_field": {"name": "减速场", "color": (100, 200, 100), "icon": "slow"},
             "damage_up": {"name": "强化", "color": (255, 200, 100), "icon": "sword"},
             "damage_down": {"name": "弱化", "color": (100, 100, 100), "icon": "broken_sword"},
             "teleport": {"name": "瞬移", "color": (200, 100, 255), "icon": "blink"},
+            "lifesteal": {"name": "吸血", "color": (180, 50, 200), "icon": "vampire"},
+            "multi_shot": {"name": "连发", "color": (100, 150, 255), "icon": "bullets"},
         }
 
     def add_buff(self, buff_type: str, duration: float):
@@ -127,6 +131,23 @@ class BuffDisplay:
             points = [(x + size//2, y), (x + size//4, y + size//2), (x + size//2, y + size//2),
                      (x + size//4 + 2, y + size), (x + size, y + size//3), (x + size//2 + 2, y + size//3)]
             pygame.draw.polygon(surface, color, points)
+        elif icon_type == "vampire":
+            # 吸血（血滴形状）
+            points = [(x + size//2, y + 2), (x + size - 2, y + size//2),
+                     (x + size//2, y + size - 2), (x + 2, y + size//2)]
+            pygame.draw.polygon(surface, color, points)
+        elif icon_type == "bullets":
+            # 连发（多个小圆点）
+            pygame.draw.circle(surface, color, (x + size//3, y + size//2), 3)
+            pygame.draw.circle(surface, color, (x + size//2, y + size//2), 3)
+            pygame.draw.circle(surface, color, (x + size*2//3, y + size//2), 3)
+        elif icon_type == "ice":
+            # 冰晶（六边形）
+            cx, cy = x + size//2, y + size//2
+            r = size//2 - 2
+            points = [(cx + int(math.cos(math.pi/3 * i) * r), cy + int(math.sin(math.pi/3 * i) * r)) for i in range(6)]
+            pygame.draw.polygon(surface, color, points)
+            pygame.draw.circle(surface, (255, 255, 255), (cx, cy), 3)
         else:
             pygame.draw.circle(surface, color, (x + size//2, y + size//2), size//2)
 
@@ -209,6 +230,7 @@ class FightUI:
         # 更新血条
         if p1_fighter:
             self.p1_health.set_health(p1_fighter.health)
+            self.p1_health.set_shield(p1_fighter.shield_value, p1_fighter.max_shield)
             self.p1_health.update(dt)
             self.p1_special.set_energy(int(p1_fighter.special_energy))
 
@@ -225,14 +247,23 @@ class FightUI:
                 self.p1_buffs.add_buff('stun', p1_fighter.stun_timer)
             if hasattr(p1_fighter, 'curse_timer') and p1_fighter.curse_timer > 0:
                 self.p1_buffs.add_buff('curse', p1_fighter.curse_timer)
+            if hasattr(p1_fighter, 'freeze_timer') and p1_fighter.freeze_timer > 0:
+                self.p1_buffs.add_buff('freeze', p1_fighter.freeze_timer)
             if hasattr(p1_fighter, 'shield_value') and p1_fighter.shield_value > 0:
                 self.p1_buffs.add_buff('shield', 999.0)
+            # 神秘人吸血buff
+            if hasattr(p1_fighter, 'lifesteal_timer') and p1_fighter.lifesteal_timer > 0:
+                self.p1_buffs.add_buff('lifesteal', p1_fighter.lifesteal_timer)
+            # 军师连发buff
+            if hasattr(p1_fighter, 'junshi_multi_shot_timer') and p1_fighter.junshi_multi_shot_timer > 0:
+                self.p1_buffs.add_buff('multi_shot', p1_fighter.junshi_multi_shot_timer)
 
             if p1_fighter.combat.combo_count > 1:
                 self.p1_combo.set_combo(p1_fighter.combat.combo_count)
 
         if p2_fighter:
             self.p2_health.set_health(p2_fighter.health)
+            self.p2_health.set_shield(p2_fighter.shield_value, p2_fighter.max_shield)
             self.p2_health.update(dt)
             self.p2_special.set_energy(int(p2_fighter.special_energy))
 
@@ -249,8 +280,16 @@ class FightUI:
                 self.p2_buffs.add_buff('stun', p2_fighter.stun_timer)
             if hasattr(p2_fighter, 'curse_timer') and p2_fighter.curse_timer > 0:
                 self.p2_buffs.add_buff('curse', p2_fighter.curse_timer)
+            if hasattr(p2_fighter, 'freeze_timer') and p2_fighter.freeze_timer > 0:
+                self.p2_buffs.add_buff('freeze', p2_fighter.freeze_timer)
             if hasattr(p2_fighter, 'shield_value') and p2_fighter.shield_value > 0:
                 self.p2_buffs.add_buff('shield', 999.0)
+            # 神秘人吸血buff
+            if hasattr(p2_fighter, 'lifesteal_timer') and p2_fighter.lifesteal_timer > 0:
+                self.p2_buffs.add_buff('lifesteal', p2_fighter.lifesteal_timer)
+            # 军师连发buff
+            if hasattr(p2_fighter, 'junshi_multi_shot_timer') and p2_fighter.junshi_multi_shot_timer > 0:
+                self.p2_buffs.add_buff('multi_shot', p2_fighter.junshi_multi_shot_timer)
 
             if p2_fighter.combat.combo_count > 1:
                 self.p2_combo.set_combo(p2_fighter.combat.combo_count)

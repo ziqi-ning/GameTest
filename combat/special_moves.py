@@ -107,6 +107,7 @@ class Projectile:
         self.knockback: float = 5.0
         self.knockback_up: float = 0.0
         self.char_name: str = ""
+        self.ignore_invincible: bool = False  # 是否忽略无敌（如军师连发）
 
     def update(self, dt: float):
         """更新投射物"""

@@ -334,19 +334,40 @@ class CharacterEffects:
     # ── 神秘人：叛国 ────────────────────────────────────────────
     @staticmethod
     def shenmiren_special0(manager: EffectManager, x: float, y: float, move_name: str = ""):
-        """叛国瞬斩 — 多重斩击轨迹"""
-        manager.add_particle_burst(x, y, 25, (80, 50, 120), 10.0, 8.0)
-        manager.add_slash(x, y - 20, 0, (150, 50, 200), 160)
-        manager.add_slash(x, y - 60, math.pi / 6, (100, 80, 160), 120)
-        manager.add_slash(x, y + 20, -math.pi / 6, (120, 60, 180), 100)
-        manager.add_text(move_name, x, y - 110, (150, 50, 200), 44, 1.8)
+        """叛国瞬斩 — 瞬移斩击：黑色残影+紫色刀光爆发"""
+        # 起点残影消散效果
+        manager.add_ring(x, y - 50, 40, (20, 20, 40), 0.5)
+        manager.add_particle_burst(x, y - 50, 15, (40, 40, 60), 8.0, 6.0)
+        # 终点爆发：多重刀光斩击
+        for angle_offset in [-0.4, -0.2, 0, 0.2, 0.4]:
+            manager.add_slash(x, y - 30, angle_offset, (180, 60, 220), 180)
+        # 核心紫色爆发环
+        manager.add_ring(x, y - 40, 70, (140, 40, 200), 0.6)
+        manager.add_ring(x, y - 40, 45, (100, 20, 160), 0.4)
+        # 大量紫色粒子喷射
+        manager.add_particle_burst(x, y - 40, 40, (120, 30, 180), 12.0, 9.0)
+        manager.add_particle_burst(x, y - 40, 25, (200, 100, 255), 10.0, 6.0)
+        manager.add_text(move_name, x, y - 130, (200, 80, 255), 52, 2.2)
 
     @staticmethod
     def shenmiren_special1(manager: EffectManager, x: float, y: float, move_name: str = ""):
-        """叛国诅咒 — 诅咒符文 + 紫雾"""
-        manager.add_particle_burst(x, y, 30, (120, 30, 150), 5.0, 9.0)
-        manager.add_ring(x, y, 60, (180, 50, 200), 1.2)
-        manager.add_text(move_name, x, y - 100, (180, 50, 200), 42, 2.0)
+        """叛国诅咒 — 黑暗诅咒阵：符文阵+紫黑雾气+多重光环"""
+        # 诅咒阵法：多层旋转光环
+        manager.add_ring(x, y - 50, 90, (80, 20, 120), 1.5)
+        manager.add_ring(x, y - 50, 70, (120, 30, 160), 1.2)
+        manager.add_ring(x, y - 50, 50, (160, 40, 200), 1.0)
+        # 诅咒符文粒子（深紫色）
+        manager.add_particle_burst(x, y - 50, 45, (60, 10, 100), 6.0, 10.0)
+        manager.add_particle_burst(x, y - 50, 30, (140, 20, 180), 8.0, 7.0)
+        # 暗红闪电粒子点缀
+        manager.add_particle_burst(x, y - 30, 20, (180, 20, 60), 10.0, 5.0)
+        # 诅咒螺旋（斜向斩击表现诅咒力量）
+        manager.add_slash(x, y - 60, 0.5, (200, 60, 255), 140)
+        manager.add_slash(x, y - 40, -0.5, (160, 40, 220), 120)
+        # 诅咒文字特效
+        manager.add_text(move_name, x, y - 140, (180, 60, 220), 48, 2.2)
+        # 附加诅咒标记文字
+        manager.add_text("攻击力下降！", x, y - 180, (220, 100, 255), 32, 2.0)
 
     @staticmethod
     def shenmiren_effects(manager: EffectManager, x: float, y: float, move_name: str = ""):
@@ -359,22 +380,50 @@ class CharacterEffects:
     # ── 籽桐：雕 ────────────────────────────────────────────────
     @staticmethod
     def zitong_special0(manager: EffectManager, x: float, y: float, move_name: str = ""):
-        """雕之领域 — 藤蔓 + 绿光螺旋"""
-        manager.add_particle_burst(x, y, 30, (50, 200, 80), 9.0, 7.0)
-        manager.add_ring(x, y, 80, (50, 200, 80), 1.0)
-        manager.add_slash(x, y, math.pi / 4, (80, 255, 100), 140)
-        manager.add_slash(x, y, -math.pi / 4, (100, 220, 120), 120)
-        manager.add_text(move_name, x, y - 110, (50, 200, 50), 46, 2.0)
+        """雕之领域 — 巨鹰展翅：多层绿色光环+羽毛雨+羽翼斩击"""
+        # 大范围领域光环（多层）
+        manager.add_ring(x, y - 50, 100, (30, 180, 60), 1.5)
+        manager.add_ring(x, y - 50, 80, (50, 220, 80), 1.2)
+        manager.add_ring(x, y - 50, 60, (80, 255, 100), 1.0)
+        # 羽翼斩击（表现巨鹰展开翅膀）
+        manager.add_slash(x, y - 80, 0.6, (100, 255, 130), 160)
+        manager.add_slash(x, y - 80, -0.6, (100, 255, 130), 160)
+        manager.add_slash(x, y - 50, 0, (80, 220, 100), 180)
+        # 羽毛爆发（大量羽毛从天而降）
+        for _ in range(5):
+            fx = x + random.uniform(-60, 60)
+            fy = y + random.uniform(-40, 40)
+            manager.add_particle_burst(fx, fy, 12, (80, 200, 100), 5.0, 6.0)
+            manager.add_particle_burst(fx, fy, 8, (160, 255, 150), 4.0, 4.0)
+        # 螺旋上升粒子
+        manager.add_particle_burst(x, y - 30, 25, (50, 200, 80), 9.0, 8.0)
+        manager.add_particle_burst(x, y - 50, 20, (120, 255, 140), 7.0, 5.0)
+        manager.add_text(move_name, x, y - 140, (50, 255, 80), 50, 2.2)
+        # 领域文字
+        manager.add_text("减速领域！", x, y - 180, (100, 255, 150), 34, 2.0)
 
     @staticmethod
     def zitong_special1(manager: EffectManager, x: float, y: float, move_name: str = ""):
-        """雕羽风暴 — 羽毛乱舞"""
-        for _ in range(4):
-            bx = x + random.uniform(-40, 40)
-            by = y + random.uniform(-30, 30)
-            manager.add_particle_burst(bx, by, 8, (80, 200, 100), 7.0, 5.0)
-        manager.add_ring(x, y, 70, (80, 200, 100), 0.9)
-        manager.add_text(move_name, x, y - 100, (80, 200, 100), 40, 1.8)
+        """雕羽风暴 — 羽毛龙卷：多波羽毛乱舞+旋转斩击+风暴粒子"""
+        # 多波羽毛爆发（模拟羽毛被卷起的效果）
+        for i in range(5):
+            bx = x + random.uniform(-50, 50)
+            by = y + random.uniform(-40, 40)
+            manager.add_particle_burst(bx, by, 15, (80, 200, 100), 8.0, 6.0)
+            manager.add_particle_burst(bx, by, 10, (140, 255, 160), 6.0, 4.0)
+        # 旋转斩击轨迹（表现风暴的切割力）
+        for angle in [0, 0.5, 1.0, 1.5, 2.0, 2.5]:
+            manager.add_slash(x, y - 30, angle, (100, 220, 120), 150)
+        # 风暴核心环
+        manager.add_ring(x, y - 40, 80, (60, 200, 80), 1.0)
+        manager.add_ring(x, y - 40, 55, (100, 255, 120), 0.8)
+        manager.add_ring(x, y - 40, 35, (140, 255, 160), 0.6)
+        # 螺旋上升羽毛粒子
+        manager.add_particle_burst(x, y - 20, 35, (80, 200, 100), 10.0, 7.0)
+        manager.add_particle_burst(x, y - 40, 25, (120, 255, 140), 8.0, 5.0)
+        manager.add_text(move_name, x, y - 130, (80, 255, 100), 46, 2.2)
+        # 多段打击提示
+        manager.add_text("多段命中！", x, y - 170, (150, 255, 180), 30, 1.8)
 
     @staticmethod
     def zitong_effects(manager: EffectManager, x: float, y: float, move_name: str = ""):
