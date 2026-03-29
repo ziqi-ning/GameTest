@@ -38,6 +38,8 @@ class MoveData:
     knockback_up: float = 0  # 向上击退
     can_block: bool = True  # 能否被防御
     effect_type: str = "none"  # 效果类型: none, burn, slow, poison
+    is_ranged: bool = False  # 是否为远程攻击
+    projectile_speed: float = 8.0  # 投射物速度（像素/帧）
 
 
 @dataclass
@@ -141,7 +143,7 @@ class CharacterData:
 
 
 def get_gong_dage_moves(stats: CharacterStats) -> List[MoveData]:
-    """龚大哥的普通攻击"""
+    """龚大哥的普通攻击（轻拳近战 / 重拳远程红旗）"""
     power_mult = stats.attack_power / 80.0
     return [
         MoveData(
@@ -159,24 +161,26 @@ def get_gong_dage_moves(stats: CharacterStats) -> List[MoveData]:
             effect_type="none"
         ),
         MoveData(
-            name="爱国连击",
-            damage=int(80 * power_mult),
-            hitbox_offset=(55, 25),
-            hitbox_size=(80, 55),
+            name="爱国飞旗",
+            damage=int(90 * power_mult),
+            hitbox_offset=(0, 0),
+            hitbox_size=(0, 0),
             active_start=5,
-            active_frames=4,
-            recovery_frames=7,
-            total_frames=16,
-            hitstun=20,
-            knockback=12,
-            knockback_up=4,
-            effect_type="none"
+            active_frames=0,
+            recovery_frames=10,
+            total_frames=20,
+            hitstun=18,
+            knockback=10,
+            knockback_up=2,
+            effect_type="none",
+            is_ranged=True,
+            projectile_speed=6.0
         ),
     ]
 
 
 def get_junshi_moves(stats: CharacterStats) -> List[MoveData]:
-    """军师的普通攻击"""
+    """军师的普通攻击（轻拳近战 / 重拳远程激光枪）"""
     power_mult = stats.attack_power / 80.0
     return [
         MoveData(
@@ -194,24 +198,26 @@ def get_junshi_moves(stats: CharacterStats) -> List[MoveData]:
             effect_type="none"
         ),
         MoveData(
-            name="实验室射线",
-            damage=int(60 * power_mult),
-            hitbox_offset=(120, 15),
-            hitbox_size=(180, 55),
+            name="激光枪射击",
+            damage=int(70 * power_mult),
+            hitbox_offset=(0, 0),
+            hitbox_size=(0, 0),
             active_start=4,
-            active_frames=5,
-            recovery_frames=6,
-            total_frames=15,
-            hitstun=16,
+            active_frames=0,
+            recovery_frames=10,
+            total_frames=18,
+            hitstun=14,
             knockback=8,
-            knockback_up=2,
-            effect_type="burn"
+            knockback_up=1,
+            effect_type="burn",
+            is_ranged=True,
+            projectile_speed=14.0
         ),
     ]
 
 
 def get_shenmiren_moves(stats: CharacterStats) -> List[MoveData]:
-    """神秘人的普通攻击"""
+    """神秘人的普通攻击（轻拳近战 / 重拳远程星条旗）"""
     power_mult = stats.attack_power / 80.0
     return [
         MoveData(
@@ -229,24 +235,26 @@ def get_shenmiren_moves(stats: CharacterStats) -> List[MoveData]:
             effect_type="none"
         ),
         MoveData(
-            name="叛国匕首",
-            damage=int(70 * power_mult),
-            hitbox_offset=(50, 25),
-            hitbox_size=(65, 45),
-            active_start=3,
-            active_frames=4,
-            recovery_frames=5,
-            total_frames=12,
+            name="叛国飞旗",
+            damage=int(75 * power_mult),
+            hitbox_offset=(0, 0),
+            hitbox_size=(0, 0),
+            active_start=4,
+            active_frames=0,
+            recovery_frames=8,
+            total_frames=16,
             hitstun=12,
             knockback=6,
-            knockback_up=2,
-            effect_type="poison"
+            knockback_up=1,
+            effect_type="poison",
+            is_ranged=True,
+            projectile_speed=9.0
         ),
     ]
 
 
 def get_zitong_moves(stats: CharacterStats) -> List[MoveData]:
-    """籽桐的普通攻击"""
+    """籽桐的普通攻击（轻拳近战 / 重拳远程老鹰）"""
     power_mult = stats.attack_power / 80.0
     return [
         MoveData(
@@ -264,18 +272,20 @@ def get_zitong_moves(stats: CharacterStats) -> List[MoveData]:
             effect_type="slow"
         ),
         MoveData(
-            name="雕羽连斩",
-            damage=int(55 * power_mult),
-            hitbox_offset=(50, 25),
-            hitbox_size=(70, 45),
-            active_start=4,
-            active_frames=4,
-            recovery_frames=5,
-            total_frames=13,
-            hitstun=14,
-            knockback=5,
-            knockback_up=1,
-            effect_type="slow"
+            name="鹰击长空",
+            damage=int(65 * power_mult),
+            hitbox_offset=(0, 0),
+            hitbox_size=(0, 0),
+            active_start=5,
+            active_frames=0,
+            recovery_frames=10,
+            total_frames=20,
+            hitstun=16,
+            knockback=7,
+            knockback_up=3,
+            effect_type="slow",
+            is_ranged=True,
+            projectile_speed=11.0
         ),
     ]
 

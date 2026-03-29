@@ -101,6 +101,13 @@ class Projectile:
         self.anim_frame = 0
         self.anim_timer = 0.0
 
+        # 附加属性（由发射方设置）
+        self.effect_type: str = "none"
+        self.hitstun: int = 10
+        self.knockback: float = 5.0
+        self.knockback_up: float = 0.0
+        self.char_name: str = ""
+
     def update(self, dt: float):
         """更新投射物"""
         if not self.active:
