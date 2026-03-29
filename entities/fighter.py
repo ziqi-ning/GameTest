@@ -1266,6 +1266,147 @@ class Fighter:
                     pygame.draw.ellipse(ts, (80, 160, 60, 120 - i * 25), (0, 0, 6, 6))
                     surface.blit(ts, (int(trail_x - 3), int(trail_y - 3)))
 
+    def _draw_projectiles(self, surface: pygame.Surface, camera_x: int):
+        """绘制投射物"""
+        import math
+
+        for proj in self.projectile_manager.projectiles:
+            if not proj.active:
+                continue
+
+            screen_x = proj.x - camera_x
+            screen_y = proj.y
+            dir_sign = proj.direction
+
+            char_name = getattr(proj, 'char_name', '龚大哥')
+
+            # 龚大哥 - 红旗（旋转飞行）
+            if "龚大哥" in char_name:
+                flag_w, flag_h = 30, 20
+                # 旗杆
+                pole_x1 = screen_x - 12 * dir_sign
+                pole_y1 = screen_y - 5
+                pole_x2 = screen_x + 8 * dir_sign
+                pole_y2 = screen_y - 20
+                pygame.draw.line(surface, (200, 160, 50), (int(pole_x1), int(pole_y1)),
+                               (int(pole_x2), int(pole_y2)), 2)
+                # 旗面
+                pygame.draw.rect(surface, (220, 30, 30),
+                               (int(pole_x2), int(pole_y2), int(flag_w * dir_sign), flag_h))
+                # 五角星
+                star_cx = pole_x2 + 7 * dir_sign
+                star_cy = pole_y2 + flag_h // 2
+                star_r = 5
+                points = []
+                for i in range(5):
+                    outer_angle = math.radians(90 + i * 72)
+                    inner_angle = math.radians(90 + i * 72 + 36)
+                    points.append((star_cx + math.cos(outer_angle) * star_r,
+                                  star_cy - math.sin(outer_angle) * star_r))
+                    points.append((star_cx + math.cos(inner_angle) * (star_r * 0.38),
+                                  star_cy - math.sin(inner_angle) * (star_r * 0.38)))
+                if len(points) >= 10:
+                    pygame.draw.polygon(surface, (255, 220, 0), points)
+                # 拖尾
+                for i in range(3):
+                    trail_surf = pygame.Surface((10, 10), pygame.SRCALPHA)
+                    pygame.draw.circle(trail_surf, (255, 100, 50, 100 - i * 30), (5, 5), 4)
+                    surface.blit(trail_surf, (int(screen_x - 15 * dir_sign * (i + 1) - 5), int(screen_y - 5)))
+
+            # 军师 - 激光束
+            elif "军师" in char_name:
+                beam_len = 50 * dir_sign
+                # 外层光晕
+                pygame.draw.line(surface, (50, 100, 255, 100),
+                               (int(screen_x), int(screen_y - 5)),
+                               (int(screen_x + beam_len), int(screen_y - 5)), 8)
+                pygame.draw.line(surface, (80, 130, 255, 150),
+                               (int(screen_x), int(screen_y)),
+                               (int(screen_x + beam_len), int(screen_y)), 5)
+                # 核心
+                pygame.draw.line(surface, (200, 220, 255),
+                               (int(screen_x), int(screen_y)),
+                               (int(screen_x + beam_len), int(screen_y)), 2)
+                # 能量粒子
+                for i in range(5):
+                    px = screen_x + (i * 12 + (pygame.time.get_ticks() // 30) % 12) * dir_sign
+                    if 0 < px < 1280:
+                        pygame.draw.circle(surface, (150, 200, 255),
+                                         (int(px), int(screen_y + (i % 3 - 1) * 4)), 2)
+                # 枪口火焰
+                muzzle_surf = pygame.Surface((16, 16), pygame.SRCALPHA)
+                pygame.draw.circle(muzzle_surf, (100, 200, 255, 200), (8, 8), 7)
+                pygame.draw.circle(muzzle_surf, (200, 240, 255, 150), (8, 8), 4)
+                surface.blit(muzzle_surf, (int(screen_x - 8), int(screen_y - 8)))
+
+            # 神秘人 - 星条旗
+            elif "神秘人" in char_name:
+                flag_w, flag_h = 24, 16
+                fx = screen_x - 10 * dir_sign
+                fy = screen_y - 8
+                # 蓝色区域
+                pygame.draw.rect(surface, (30, 50, 150), (int(fx), int(fy), int(10 * dir_sign), 8))
+                # 白条
+                for i in range(1, 7, 2):
+                    pygame.draw.line(surface, (240, 240, 240),
+                                   (fx, fy + i), (fx + flag_w * dir_sign, fy + i), 2)
+                # 红条
+                for i in range(2, 7, 2):
+                    pygame.draw.line(surface, (180, 20, 20),
+                                  (fx, fy + i), (fx + flag_w * dir_sign, fy + i), 2)
+                # 边框
+                pygame.draw.rect(surface, (240, 240, 240), (int(fx), int(fy), int(flag_w * dir_sign), flag_h), 1)
+                # 拖尾
+                for i in range(3):
+                    trail_surf = pygame.Surface((8, 8), pygame.SRCALPHA)
+                    pygame.draw.circle(trail_surf, (80, 80, 100, 80 - i * 25), (4, 4), 3)
+                    surface.blit(trail_surf, (int(screen_x - 12 * dir_sign * (i + 1) - 4), int(screen_y - 4)))
+
+            # 籽桐 - 老鹰
+            elif "籽桐" in char_name:
+                flap = math.sin(pygame.time.get_ticks() * 0.02) * 8
+                body_cx = screen_x
+                body_cy = screen_y
+                # 身体
+                pygame.draw.ellipse(surface, (139, 90, 43), (int(body_cx - 10), int(body_cy - 6), 20, 12))
+                # 翅膀（左+右展开）
+                wing_color = (120, 80, 35)
+                # 左翼
+                wx1 = body_cx - 5
+                wy1 = body_cy - 2
+                wtip1_x = body_cx - 25 - int(flap)
+                wtip1_y = body_cy - 15 + int(abs(flap) * 0.5)
+                pygame.draw.line(surface, wing_color, (int(wx1), int(wy1)), (int(wtip1_x), int(wtip1_y)), 3)
+                pygame.draw.line(surface, wing_color, (int(wx1), int(wy1 + 2)), (int(wtip1_x), int(wtip1_y + 8)), 3)
+                # 右翼
+                wtip2_x = body_cx + 25 + int(flap)
+                wtip2_y = body_cy - 15 + int(abs(flap) * 0.5)
+                pygame.draw.line(surface, wing_color, (int(body_cx + 5), int(wy1)), (int(wtip2_x), int(wtip2_y)), 3)
+                pygame.draw.line(surface, wing_color, (int(body_cx + 5), int(wy1 + 2)), (int(wtip2_x), int(wtip2_y + 8)), 3)
+                # 头+喙
+                head_x = body_cx + 10 * dir_sign
+                head_y = body_cy - 4
+                pygame.draw.ellipse(surface, (139, 90, 43), (int(head_x - 5), int(head_y - 5), 10, 10))
+                pygame.draw.polygon(surface, (255, 200, 0), [
+                    (int(head_x + 5 * dir_sign), int(head_y - 2)),
+                    (int(head_x + 12 * dir_sign), int(head_y)),
+                    (int(head_x + 5 * dir_sign), int(head_y + 2))
+                ])
+                # 眼睛
+                eye_x = head_x + 3 * dir_sign
+                pygame.draw.circle(surface, (0, 0, 0), (int(eye_x), int(head_y - 2)), 2)
+                pygame.draw.circle(surface, (200, 50, 0), (int(eye_x), int(head_y - 2)), 1)
+                # 尾羽
+                pygame.draw.line(surface, (100, 70, 30), (int(body_cx - 10), int(body_cy)),
+                               (int(body_cx - 20 * dir_sign), int(body_cy + 2)), 3)
+                # 羽毛拖尾
+                for i in range(4):
+                    trail_x = body_cx - 15 * dir_sign * (i + 1)
+                    trail_y = body_cy + (i % 3 - 1) * 6
+                    ts = pygame.Surface((6, 6), pygame.SRCALPHA)
+                    pygame.draw.ellipse(ts, (80, 160, 60, 120 - i * 25), (0, 0, 6, 6))
+                    surface.blit(ts, (int(trail_x - 3), int(trail_y - 3)))
+
     def reset(self, x: float, y: float):
         """重置角色状态"""
         self.x = x
