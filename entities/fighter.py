@@ -1074,14 +1074,14 @@ class Fighter:
                 wing_color = (120, 80, 35)
                 # 左翼
                 pygame.draw.line(surface, wing_color, (body_cx - 5, body_cy - 2),
-                               (body_cx - 25 - int(flap), body_cy - 15 + int(abs(flap) * 0.5))), 3)
+                               (body_cx - 25 - int(flap), body_cy - 15 + int(abs(flap) * 0.5)), 3)
                 pygame.draw.line(surface, wing_color, (body_cx - 5, body_cy + 2),
-                               (body_cx - 25 - int(flap), body_cy + 10 - int(abs(flap) * 0.5))), 3)
+                               (body_cx - 25 - int(flap), body_cy + 10 - int(abs(flap) * 0.5)), 3)
                 # 右翼
                 pygame.draw.line(surface, wing_color, (body_cx + 5, body_cy - 2),
-                               (body_cx + 25 + int(flap), body_cy - 15 + int(abs(flap) * 0.5))), 3)
+                               (body_cx + 25 + int(flap), body_cy - 15 + int(abs(flap) * 0.5)), 3)
                 pygame.draw.line(surface, wing_color, (body_cx + 5, body_cy + 2),
-                               (body_cx + 25 + int(flap), body_cy + 10 - int(abs(flap) * 0.5))), 3)
+                               (body_cx + 25 + int(flap), body_cy + 10 - int(abs(flap) * 0.5)), 3)
                 # 头+喙（朝飞行方向）
                 head_x = body_cx + 10 * dir_sign
                 pygame.draw.ellipse(surface, (139, 90, 43), (int(head_x - 5), int(body_cy - 8), 10, 10))
