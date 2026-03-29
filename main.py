@@ -2,6 +2,7 @@
 
 import pygame
 import sys
+import random
 from typing import Optional
 
 # 初始化Pygame
@@ -15,9 +16,11 @@ from entities.player import Player
 from entities.ai_fighter import AIFighter
 from ui.menu import Menu
 from ui.character_select import CharacterSelect
+from ui.map_select import MapSelect, MAPS
 from ui.fight_ui import FightUI, VictoryScreen
 from ui.timer import Timer, Announcement
-from stages.stage_1 import Stage1
+from stages.dorm_stage import DormStage
+from stages.castle_stage import CastleStage
 from effects.ultimate_effect import UltimateEffectManager
 from assets.screen_effects import ScreenEffects
 from assets.vfx_player import VFXPlayer
@@ -40,6 +43,11 @@ class Game:
         # 角色选择
         self.character_select = CharacterSelect(SCREEN_WIDTH, SCREEN_HEIGHT)
 
+        # 地图选择
+        self.map_select = MapSelect(SCREEN_WIDTH, SCREEN_HEIGHT)
+        self.selected_map_index = 0  # 默认选第一张地图
+        self.selected_map = None
+
         # 战斗（暂时使用默认颜色，会在 start_match 时更新）
         self.fight_ui = FightUI(SCREEN_WIDTH, SCREEN_HEIGHT)
         self.victory_screen = VictoryScreen(SCREEN_WIDTH, SCREEN_HEIGHT)
@@ -48,8 +56,9 @@ class Game:
         self.player1: Optional[Player] = None
         self.player2: Optional[Fighter] = None
 
-        # 场景
-        self.stage = Stage1(SCREEN_WIDTH, SCREEN_HEIGHT)
+        # 场景（由 start_match 根据地图创建）
+        self.stage = None
+        self.selected_map = None
 
         # 回合管理
         self.p1_wins = 0
@@ -101,6 +110,10 @@ class Game:
                         self.running = False
                     elif self.state == GameState.CHARACTER_SELECT:
                         self.state = GameState.MENU
+                    elif self.state == GameState.MAP_SELECT:
+                        self.state = GameState.CHARACTER_SELECT
+                        self.map_select.is_transitioning = False
+                        self.map_select.confirm_timer = 0.0
                     elif self.state == GameState.FIGHTING:
                         self.state = GameState.MENU
 
@@ -130,7 +143,21 @@ class Game:
             elif self.state == GameState.CHARACTER_SELECT:
                 selections = self.character_select.handle_input(event)
                 if selections:
-                    self.start_match(selections[0], selections[1])
+                    self.state = GameState.MAP_SELECT
+                    self.map_select.selection = 0
+                    self.map_select.is_transitioning = False
+                    self.map_select.confirm_timer = 0.0
+
+            # 地图选择输入
+            elif self.state == GameState.MAP_SELECT:
+                result = self.map_select.handle_input(event)
+                if result == -1:
+                    self.state = GameState.CHARACTER_SELECT
+                elif result is not None and result >= 0:
+                    self.selected_map_index = result
+                    p1_char = self.character_select.p1_selection
+                    p2_char = self.character_select.p2_selection
+                    self.start_match(p1_char, p2_char)
 
             # 回合结束输入
             elif self.state == GameState.ROUND_END:
@@ -148,6 +175,8 @@ class Game:
             self.menu.update(dt)
         elif self.state == GameState.CHARACTER_SELECT:
             self.character_select.update(dt)
+        elif self.state == GameState.MAP_SELECT:
+            self.map_select.update(dt)
         elif self.state == GameState.FIGHTING:
             self.update_fight(dt)
         elif self.state == GameState.ROUND_END:
@@ -190,15 +219,22 @@ class Game:
             right = bool(keys[pygame.K_d])
             up = bool(keys[pygame.K_w])
             down = bool(keys[pygame.K_s])
-            block = bool(keys[pygame.K_u])
+            block = bool(keys[pygame.K_p])
             light = key_pressed(pygame.K_j)
             heavy = key_pressed(pygame.K_k)
             special = key_pressed(pygame.K_l)
             special_2 = key_pressed(pygame.K_i)
+            summon = key_pressed(pygame.K_u)
+            toggle = key_pressed(pygame.K_o)
 
             # 先update更新_opponent_ref，再处理输入
             self.player1.update(dt, self.player2)
-            self.player1.handle_input(left, right, up, down, light, heavy, special, special_2, block)
+            self.player1.handle_input(left, right, up, down, light, heavy, special, special_2, block, summon, toggle)
+
+            # 更新小兵管理器
+            p2_manager = getattr(self.player2, 'minion_manager', None)
+            self.player1.minion_manager.stage = self.stage
+            self.player1.minion_manager.update(dt, self.player1.x, self.player1.y, self.player2, p2_manager)
 
             # 检测终极必杀技释放（发动时一次性触发）
             if self.player1.ultimate_pending_trigger:
@@ -213,6 +249,14 @@ class Game:
             if self.is_vs_ai:
                 # AI：先保存opponent引用，再调用update（包含AI逻辑和timer更新）
                 self.player2.update(dt, self.player1)
+                # AI也更新小兵管理器
+                p1_manager = getattr(self.player1, 'minion_manager', None)
+                self.player2.minion_manager.stage = self.stage
+                self.player2.minion_manager.update(dt, self.player2.x, self.player2.y, self.player1, p1_manager)
+                # AI自动召唤小兵（有足够金币时）
+                if self.player2.minion_manager.coin_int >= 20:
+                    if random.random() < 0.3:  # 30%概率召唤
+                        self.player2.minion_manager.try_summon(self.player2.x, self.player2.y)
             else:
                 p2_left = bool(keys[pygame.K_LEFT])
                 p2_right = bool(keys[pygame.K_RIGHT])
@@ -221,9 +265,15 @@ class Game:
                 p2_block = bool(keys[pygame.K_KP0])
                 p2_special = key_pressed(pygame.K_KP3)
                 p2_special_2 = key_pressed(pygame.K_PERIOD)
+                p2_summon = key_pressed(pygame.K_KP4)
+                p2_toggle = key_pressed(pygame.K_KP5)
                 # 先update更新_opponent_ref，再处理输入
                 self.player2.update(dt, self.player1)
-                self.player2.handle_input(p2_left, p2_right, p2_up, p2_down, False, False, p2_special, p2_special_2, p2_block)
+                self.player2.handle_input(p2_left, p2_right, p2_up, p2_down, False, False, p2_special, p2_special_2, p2_block, p2_summon, p2_toggle)
+                # 更新小兵管理器
+                p1_manager = getattr(self.player1, 'minion_manager', None)
+                self.player2.minion_manager.stage = self.stage
+                self.player2.minion_manager.update(dt, self.player2.x, self.player2.y, self.player1, p1_manager)
 
             # 检测终极必杀技释放
             if self.player2.ultimate_pending_trigger:
@@ -273,6 +323,11 @@ class Game:
         self.p1_char_index = p1_char
         self.p2_char_index = p2_char
 
+        # 根据选择的地图创建场景
+        map_info = MAPS[self.selected_map_index]
+        self.selected_map = map_info
+        self.stage = map_info['stage_class'](SCREEN_WIDTH, SCREEN_HEIGHT)
+
         # 获取角色数据并更新 UI 颜色
         p1_data = get_character(p1_char)
         p2_data = get_character(p2_char)
@@ -305,11 +360,11 @@ class Game:
         p1_data = get_character(self.p1_char_index)
         p2_data = get_character(self.p2_char_index)
 
-        self.player1 = Player(1, p1_data, 300, self.stage.ground_y, self.p1_char_index)
+        self.player1 = Player(1, p1_data, 300, self.stage.ground_y, self.p1_char_index, self.stage)
         if self.is_vs_ai:
-            self.player2 = AIFighter(2, p2_data, 980, self.stage.ground_y, self.p2_char_index)
+            self.player2 = AIFighter(2, p2_data, 980, self.stage.ground_y, self.p2_char_index, self.stage)
         else:
-            self.player2 = Player(2, p2_data, 980, self.stage.ground_y, self.p2_char_index)
+            self.player2 = Player(2, p2_data, 980, self.stage.ground_y, self.p2_char_index, self.stage)
 
         self.announcement.show("ROUND 1", 1.5)
         pygame.time.set_timer(pygame.USEREVENT + 1, 2000, loops=1)
@@ -377,6 +432,8 @@ class Game:
             self.menu.draw(main_surface)
         elif self.state == GameState.CHARACTER_SELECT:
             self.character_select.draw(main_surface)
+        elif self.state == GameState.MAP_SELECT:
+            self.map_select.draw(main_surface)
         elif self.state in [GameState.FIGHTING, GameState.ROUND_END]:
             self.stage.draw(main_surface)
             if self.player1:
@@ -384,12 +441,26 @@ class Game:
             if self.player2:
                 self.player2.draw(main_surface)
 
+            # 绘制小兵
+            if self.player1:
+                self.player1.minion_manager.draw(main_surface)
+            if self.player2:
+                self.player2.minion_manager.draw(main_surface)
+
             # 绘制VFX精灵动画（命中火花、斩击等）
             self.vfx_player.draw(main_surface)
 
             p1_name = CHARACTER_LIST[self.p1_char_index]['name'] if hasattr(self, 'p1_char_index') else "P1"
             p2_name = CHARACTER_LIST[self.p2_char_index]['name'] if hasattr(self, 'p2_char_index') else "P2"
             self.fight_ui.draw(main_surface, p1_name, p2_name)
+
+            # 绘制金币HUD
+            if self.player1 and hasattr(self.player1, 'minion_manager'):
+                self.player1.minion_manager.draw_hud(
+                    main_surface, 375, 52, True, self.fight_ui.name_font)
+            if self.player2 and hasattr(self.player2, 'minion_manager'):
+                self.player2.minion_manager.draw_hud(
+                    main_surface, SCREEN_WIDTH - 375, 52, False, self.fight_ui.name_font)
             self.announcement.draw(main_surface)
 
             # 绘制终极必杀技特效

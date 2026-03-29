@@ -84,7 +84,7 @@ class CharacterData:
             weapon_type="flag",
             max_health=1500,
             walk_speed=2.5,
-            jump_force=10.0,
+            jump_force=13.0,  # 力量型角色，能跳上第一阶平台（约169px高度）
             attack_power=120,
             defense=0.25,
             special_cost=80,

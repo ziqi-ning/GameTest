@@ -20,8 +20,8 @@ MAX_SPECIAL = 100
 # 倒计时
 MATCH_TIME = 99  # 秒
 
-# 重力
-GRAVITY = 0.8
+# 重力（调低让跳跃更舒适，低力角色也能跳上中低平台）
+GRAVITY = 0.5
 
 # 颜色定义
 class Colors:

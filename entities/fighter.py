@@ -22,11 +22,13 @@ from assets.weapon_assets import WeaponAssets
 class Fighter:
     """战斗角色基类"""
 
-    def __init__(self, player_id: int, char_data: CharacterData, x: float, y: float, char_index: int = 0):
+    def __init__(self, player_id: int, char_data: CharacterData, x: float, y: float,
+                 char_index: int = 0, stage=None):
         self.player_id = player_id
         self.char_data = char_data
         self.stats = char_data.stats
         self.char_index = char_index  # 角色索引（用于加载正确精灵）
+        self.stage = stage  # 场景引用（用于平台碰撞）
 
         # 位置和移动
         self.x = x
@@ -116,6 +118,10 @@ class Fighter:
         if char_data.special:
             self.special_manager.set_special_moves(char_data.special)
 
+        # 小兵管理器（金币 + 随从系统）
+        from entities.minion_manager import MinionManager
+        self.minion_manager = MinionManager(player_id, self.stats.name_cn)
+
     @property
     def facing_right(self) -> bool:
         return self.direction == Direction.RIGHT
@@ -143,19 +149,12 @@ class Fighter:
         if not self.is_attacking or not self.current_attack:
             return None
 
-        # 计算判定框位置
         move = self.current_attack
-        dir = self.direction
+        dir_sign = 1 if self.facing_right else -1
 
-        # 只在active帧期间显示判定框
         if move.active_start <= self.attack_frame < move.active_start + move.active_frames:
-            hitbox_x = self.x + move.hitbox_offset[0] * dir - move.hitbox_size[0] // 2
+            hitbox_x = self.x + move.hitbox_offset[0] * dir_sign - move.hitbox_size[0] // 2
             hitbox_y = self.y - 120 + move.hitbox_offset[1]
-
-            # 翻转x坐标
-            if dir == Direction.LEFT:
-                hitbox_x = self.x - move.hitbox_offset[0] * dir - move.hitbox_size[0] // 2
-
             return (hitbox_x, hitbox_y, move.hitbox_size[0], move.hitbox_size[1])
 
         return None
@@ -274,8 +273,19 @@ class Fighter:
         self.x += self.vel_x * 60 * dt
         self.y += self.vel_y * 60 * dt
 
-        # 地面碰撞
-        if self.y >= GROUND_Y:
+        # 平台碰撞
+        self.on_ground = False
+        if self.stage and self.stage.platforms and self.vel_y >= 0:
+            feet_y = self.y
+            for px, py, pw, ph in self.stage.platforms:
+                if (px <= self.x <= px + pw and
+                        py - 15 <= feet_y <= py + 8):
+                    self.y = py
+                    self.vel_y = 0
+                    self.on_ground = True
+                    break
+        # 地面碰撞（兜底）
+        if not self.on_ground and self.y >= GROUND_Y:
             self.y = GROUND_Y
             self.vel_y = 0
             self.on_ground = True
@@ -546,9 +556,11 @@ class Fighter:
         # 判定帧
         if (move.active_start <= self.attack_frame <
                 move.active_start + move.active_frames):
-            # 检测命中
+            # 检测命中主角
             if opponent:
                 self.check_hit(opponent)
+            # 检测命中敌方小兵
+            self._check_hit_enemy_minions()
 
         # 攻击结束
         if self.attack_frame >= move.total_frames:
@@ -618,6 +630,54 @@ class Fighter:
                 if effect_func:
                     effect_x = opponent.x
                     effect_func(self.effect_manager, effect_x, opponent.y - 50, move_data.name)
+
+    def _check_hit_enemy_minions(self):
+        """检测攻击判定框是否命中敌方小兵"""
+        # 获取当前攻击数据
+        if self.is_special_attacking and self.current_special:
+            move_data = self.current_special
+            offset = move_data.hitbox_offset
+            size = move_data.hitbox_size
+        elif self.current_attack:
+            move_data = self.current_attack
+            offset = move_data.hitbox_offset
+            size = move_data.hitbox_size
+        else:
+            return
+
+        if size[0] == 0 or size[1] == 0:
+            return  # 远程攻击无近战判定框
+
+        dir_sign = 1 if self.facing_right else -1
+        hitbox_x = self.x + offset[0] * dir_sign - size[0] // 2
+        hitbox_y = self.y - 120 + offset[1]
+        # 扩大判定框宽度，更容易命中小兵
+        expanded = (hitbox_x - 10, hitbox_y - 10, size[0] + 20, size[1] + 20)
+        hitbox = expanded
+
+        # 找对手的小兵管理器（通过 _opponent_ref）
+        opponent = getattr(self, '_opponent_ref', None)
+        if not opponent:
+            return
+        enemy_manager = getattr(opponent, 'minion_manager', None)
+        if not enemy_manager:
+            return
+
+        damage = int(self.stats.attack_power * 0.8)  # 对小兵伤害略低
+
+        for minion in enemy_manager.minions:
+            if not minion.alive:
+                continue
+            mbox = minion.get_hurtbox()
+            if (hitbox[0] < mbox[0] + mbox[2] and hitbox[0] + hitbox[2] > mbox[0] and
+                    hitbox[1] < mbox[1] + mbox[3] and hitbox[1] + hitbox[3] > mbox[1]):
+                minion.take_damage(damage)
+                # 击杀奖励金币给攻击方
+                if not minion.alive:
+                    self.minion_manager.coins += 5
+                    self.effect_manager.add_text("+5G", self.x, self.y - 160, (255, 220, 60), 26, 0.8)
+                # 命中特效
+                self.effect_manager.add_particle_burst(minion.x, minion.y - 20, 4, (255, 150, 50), 3.0, 2.0)
 
     def apply_hit(self, opponent: 'Fighter', move):
         """应用命中效果"""
@@ -925,6 +985,26 @@ class Fighter:
         if self.health <= 0:
             self.ko()
 
+    def take_minion_damage(self, damage: int, attacker_owner_id: int):
+        """承受小兵伤害（无击退，轻微硬直）"""
+        if self.is_invincible:
+            return
+        # 护盾吸收
+        if self.shield_value > 0:
+            absorbed = min(self.shield_value, damage)
+            self.shield_value -= absorbed
+            damage -= absorbed
+            if damage <= 0:
+                return
+        self.health = max(0, self.health - damage)
+        self.hit_effect_timer = 0.1
+        self.last_hit_by = attacker_owner_id
+        self.effect_manager.add_text(
+            f"-{damage}", self.x, self.y - 100, (255, 140, 80), 28, 0.8
+        )
+        if self.health <= 0:
+            self.ko()
+
     def apply_knockback(self, dt: float):
         """应用击退"""
         self.x += self.knockback_x * 60 * dt
@@ -932,9 +1012,21 @@ class Fighter:
 
         self.knockback_y += GRAVITY * 30 * dt
 
-        if self.y >= GROUND_Y:
+        # 平台碰撞（击退时也要能站在平台上）
+        self.on_ground = False
+        if self.stage and self.stage.platforms and self.knockback_y >= 0:
+            feet_y = self.y
+            for px, py, pw, ph in self.stage.platforms:
+                if (px <= self.x <= px + pw and
+                        py - 10 <= feet_y <= py + 10):
+                    self.y = py
+                    self.knockback_y = 0
+                    self.on_ground = True
+                    break
+        if not self.on_ground and self.y >= GROUND_Y:
             self.y = GROUND_Y
             self.knockback_y = 0
+            self.on_ground = True
 
         self.x = clamp(self.x, 60, 1220)
 
