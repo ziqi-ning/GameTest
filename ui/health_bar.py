@@ -7,7 +7,9 @@ class HealthBar:
     """血条组件"""
 
     def __init__(self, x: int, y: int, width: int, height: int,
-                 is_player1: bool = True):
+                 is_player1: bool = True,
+                 character_color: Tuple[int, int, int] = (50, 200, 80),
+                 secondary_color: Tuple[int, int, int] = (220, 180, 30)):
         self.x = x
         self.y = y
         self.width = width
@@ -20,10 +22,14 @@ class HealthBar:
         self.display_health = 1000  # 平滑显示
         self.smooth_speed = 8.0
 
+        # 角色颜色（用于渐变效果）
+        self.character_color = character_color
+        self.secondary_color = secondary_color
+
         # 颜色
         self.bg_color = (40, 40, 50)
-        self.health_high = (50, 200, 80)
-        self.health_med = (220, 180, 30)
+        self.health_high = character_color  # 使用角色主色
+        self.health_med = secondary_color   # 使用角色次色
         self.health_low = (200, 30, 30)
         self.border_color = (80, 80, 100)
 

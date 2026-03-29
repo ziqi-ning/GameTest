@@ -37,7 +37,7 @@ class Game:
         # 角色选择
         self.character_select = CharacterSelect(SCREEN_WIDTH, SCREEN_HEIGHT)
 
-        # 战斗
+        # 战斗（暂时使用默认颜色，会在 start_match 时更新）
         self.fight_ui = FightUI(SCREEN_WIDTH, SCREEN_HEIGHT)
         self.victory_screen = VictoryScreen(SCREEN_WIDTH, SCREEN_HEIGHT)
 
@@ -223,6 +223,20 @@ class Game:
         self.fight_ui.set_round_wins(0, 0)
         self.p1_char_index = p1_char
         self.p2_char_index = p2_char
+
+        # 获取角色数据并更新 UI 颜色
+        p1_data = get_character(p1_char)
+        p2_data = get_character(p2_char)
+        self.fight_ui.p1_health.character_color = p1_data.stats.color
+        self.fight_ui.p1_health.secondary_color = p1_data.stats.secondary_color
+        self.fight_ui.p1_health.health_high = p1_data.stats.color
+        self.fight_ui.p1_health.health_med = p1_data.stats.secondary_color
+
+        self.fight_ui.p2_health.character_color = p2_data.stats.color
+        self.fight_ui.p2_health.secondary_color = p2_data.stats.secondary_color
+        self.fight_ui.p2_health.health_high = p2_data.stats.color
+        self.fight_ui.p2_health.health_med = p2_data.stats.secondary_color
+
         self.start_round()
 
     def start_round(self):
@@ -234,11 +248,11 @@ class Game:
         p1_data = get_character(self.p1_char_index)
         p2_data = get_character(self.p2_char_index)
 
-        self.player1 = Player(1, p1_data, 300, self.stage.ground_y)
+        self.player1 = Player(1, p1_data, 300, self.stage.ground_y, self.p1_char_index)
         if self.is_vs_ai:
-            self.player2 = AIFighter(2, p2_data, 980, self.stage.ground_y)
+            self.player2 = AIFighter(2, p2_data, 980, self.stage.ground_y, self.p2_char_index)
         else:
-            self.player2 = Player(2, p2_data, 980, self.stage.ground_y)
+            self.player2 = Player(2, p2_data, 980, self.stage.ground_y, self.p2_char_index)
 
         self.announcement.show("ROUND 1", 1.5)
         pygame.time.set_timer(pygame.USEREVENT + 1, 2000, loops=1)
@@ -292,6 +306,11 @@ class Game:
         self.p1_wins = 0
         self.p2_wins = 0
         self.fight_ui.set_round_wins(0, 0)
+        # 重置角色选择状态
+        self.character_select.p1_selection = 0
+        self.character_select.p2_selection = 1
+        self.character_select.phase = "p1_select"
+        self.character_select.confirm_timer = 0.0
 
     def render(self):
         """渲染"""

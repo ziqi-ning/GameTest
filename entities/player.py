@@ -11,8 +11,8 @@ from input.control_scheme import PLAYER_1, PLAYER_2
 class Player(Fighter):
     """玩家控制的角色"""
 
-    def __init__(self, player_id: int, char_data, x: float, y: float):
-        super().__init__(player_id, char_data, x, y)
+    def __init__(self, player_id: int, char_data, x: float, y: float, char_index: int = 0):
+        super().__init__(player_id, char_data, x, y, char_index)
 
         # 获取控制方案
         if player_id == 1:

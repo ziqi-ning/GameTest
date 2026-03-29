@@ -10,8 +10,9 @@ from constants import FighterState, Direction
 class AIFighter(Fighter):
     """AI控制的角色"""
 
-    def __init__(self, player_id: int, char_data, x: float, y: float, difficulty: str = "normal"):
-        super().__init__(player_id, char_data, x, y)
+    def __init__(self, player_id: int, char_data, x: float, y: float,
+                 char_index: int = 0, difficulty: str = "normal"):
+        super().__init__(player_id, char_data, x, y, char_index)
 
         self.is_human = False
         self.difficulty = difficulty

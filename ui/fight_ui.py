@@ -1,21 +1,27 @@
 # 战斗界面UI
 
 import pygame
-from typing import Optional
+from typing import Optional, Tuple
 
 class FightUI:
     """战斗界面UI管理"""
 
-    def __init__(self, screen_width: int, screen_height: int):
+    def __init__(self, screen_width: int, screen_height: int,
+                 p1_color: Tuple[int, int, int] = (50, 200, 80),
+                 p1_secondary: Tuple[int, int, int] = (220, 180, 30),
+                 p2_color: Tuple[int, int, int] = (100, 50, 220),
+                 p2_secondary: Tuple[int, int, int] = (70, 30, 180)):
         self.screen_width = screen_width
         self.screen_height = screen_height
 
         from ui.health_bar import HealthBar, SpecialBar, ComboDisplay
         from ui.timer import Timer, RoundDisplay, Announcement
 
-        # 血条
-        self.p1_health = HealthBar(20, 20, 400, 30, is_player1=True)
-        self.p2_health = HealthBar(screen_width - 420, 20, 400, 30, is_player1=False)
+        # 血条（传入角色颜色）
+        self.p1_health = HealthBar(20, 20, 400, 30, is_player1=True,
+                                    character_color=p1_color, secondary_color=p1_secondary)
+        self.p2_health = HealthBar(screen_width - 420, 20, 400, 30, is_player1=False,
+                                    character_color=p2_color, secondary_color=p2_secondary)
 
         # 能量槽
         self.p1_special = SpecialBar(20, 55, 200, 15, is_player1=True)

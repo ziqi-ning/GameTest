@@ -19,10 +19,11 @@ from characters.character_base import CharacterData, MoveData, SpecialMoveData
 class Fighter:
     """战斗角色基类"""
 
-    def __init__(self, player_id: int, char_data: CharacterData, x: float, y: float):
+    def __init__(self, player_id: int, char_data: CharacterData, x: float, y: float, char_index: int = 0):
         self.player_id = player_id
         self.char_data = char_data
         self.stats = char_data.stats
+        self.char_index = char_index  # 角色索引（用于加载正确精灵）
 
         # 位置和移动
         self.x = x
@@ -323,7 +324,22 @@ class Fighter:
         """更新攻击状态"""
         self.attack_frame += 1
 
-        move = self.current_attack
+        # 必杀技使用 current_special，普通攻击使用 current_attack
+        if self.is_special_attacking and self.current_special:
+            move = self.current_special
+        else:
+            move = self.current_attack
+
+        if move is None:
+            # 防御性处理：没有攻击数据时结束攻击状态
+            self.is_attacking = False
+            self.is_special_attacking = False
+            self.current_attack = None
+            self.current_special = None
+            self.attack_cooldown = 0.1
+            self.state = FighterState.IDLE
+            self.animator.set_state(AnimationState.IDLE)
+            return
 
         # 同步动画帧 (让动画跟着攻击帧走)
         anim_frame = min(self.attack_frame // 3, self.animator.get_frame_count() - 1)
@@ -342,21 +358,55 @@ class Fighter:
             self.is_attacking = False
             self.is_special_attacking = False
             self.current_attack = None
+            self.current_special = None
             self.attack_cooldown = 0.1
             self.state = FighterState.IDLE
             self.animator.set_state(AnimationState.IDLE)
 
     def check_hit(self, opponent: 'Fighter'):
         """检查攻击是否命中"""
-        if not self.current_attack or not opponent:
+        # 必杀技使用 current_special，普通攻击使用 current_attack
+        if self.is_special_attacking and self.current_special:
+            move_data = self.current_special
+        else:
+            move_data = self.current_attack
+
+        if not move_data or not opponent:
             return
 
-        hitbox_rect = self.get_hitbox_rect()
-        if not hitbox_rect:
+        # 构建攻击数据用于命中检测
+        class HitMoveData:
+            def __init__(self, special_data):
+                self.name = special_data.name
+                self.knockback = special_data.knockback
+                self.knockback_up = special_data.knockback_up
+                self.can_block = True  # 必杀技也可被防御
+                self.hitbox_offset = special_data.hitbox_offset
+                self.hitbox_size = special_data.hitbox_size
+                self.active_start = special_data.active_start
+                self.active_frames = special_data.active_frames
+                self.total_frames = special_data.total_frames
+
+        move = HitMoveData(move_data)
+
+        # 计算判定框位置
+        dir = self.direction
+        # 只在active帧期间显示判定框
+        if not (move.active_start <= self.attack_frame < move.active_start + move.active_frames):
             return
+
+        hitbox_x = self.x + move.hitbox_offset[0] * dir - move.hitbox_size[0] // 2
+        hitbox_y = self.y - 120 + move.hitbox_offset[1]
+
+        # 翻转x坐标
+        if dir == Direction.LEFT:
+            hitbox_x = self.x - move.hitbox_offset[0] * dir - move.hitbox_size[0] // 2
+
+        hitbox_rect = (hitbox_x, hitbox_y, move.hitbox_size[0], move.hitbox_size[1])
 
         hurtbox_rect = opponent.get_hurtbox_rect()
-        move = self.current_attack
+        original_move = self.current_attack  # 保存普通攻击数据（用于伤害计算）
+        attack_move = move  # HitMoveData 对象（用于防御检查）
 
         # 碰撞检测
         if (hitbox_rect[0] < hurtbox_rect[0] + hurtbox_rect[2] and
@@ -365,15 +415,15 @@ class Fighter:
             hitbox_rect[1] + hitbox_rect[3] > hurtbox_rect[1]):
 
             # 检查防御
-            if opponent.is_blocking and move.can_block:
-                self.apply_blocked_hit(opponent, move)
+            if opponent.is_blocking and attack_move.can_block:
+                self.apply_blocked_hit(opponent, move_data)
             elif not opponent.is_invincible:
-                self.apply_hit(opponent, move)
+                self.apply_hit(opponent, move_data)
 
                 # 触发命中特效
                 if self.effect_func:
                     effect_x = opponent.x
-                    self.effect_func(self.effect_manager, effect_x, opponent.y - 50, move.name)
+                    self.effect_func(self.effect_manager, effect_x, opponent.y - 50, move_data.name)
 
     def apply_hit(self, opponent: 'Fighter', move):
         """应用命中效果"""
@@ -491,7 +541,7 @@ class Fighter:
 
         # 获取精灵帧
         sprite = get_sprite(
-            self.player_id - 1,
+            self.char_index,
             pose,
             self.facing_right,
             anim_frame
