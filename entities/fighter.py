@@ -2,6 +2,7 @@
 
 import pygame
 import random
+import math
 from typing import Optional, Tuple, List
 from config import GROUND_Y, GRAVITY, Colors
 from constants import FighterState, Direction, FrameData, DamageMultiplier
@@ -14,6 +15,8 @@ from combat import (
     SpecialMoveManager, EffectManager, CharacterEffects
 )
 from characters.character_base import CharacterData, MoveData, SpecialMoveData
+from entities.weapon_data import WeaponType, get_weapon, WeaponData
+from assets.weapon_assets import WeaponAssets
 
 
 class Fighter:
@@ -59,6 +62,13 @@ class Fighter:
         # 特效系统
         self.effect_manager = EffectManager()
         self._char_effect_name = self.stats.name_cn
+
+        # 武器系统（从角色stats中读取weapon_type，自动查找对应WeaponData）
+        try:
+            wpn_type = WeaponType(self.stats.weapon_type)
+        except (ValueError, TypeError):
+            wpn_type = WeaponType.FIST
+        self.weapon_data: WeaponData = get_weapon(wpn_type)
 
         # 攻击状态
         self.current_attack: Optional[MoveData] = None
@@ -806,9 +816,8 @@ class Fighter:
     def draw(self, surface: pygame.Surface, camera_x: int = 0):
         """绘制角色"""
         from animation.sprite_loader import get_sprite
-        from animation.animator import Animator
 
-        # 获取当前动画帧
+        screen_x = self.x - camera_x
         pose = self.animator.get_pose_name()
         anim_frame = self.animator.get_current_frame()
 
@@ -820,36 +829,42 @@ class Fighter:
             anim_frame
         )
 
-        if sprite is None:
+        # 无敌闪烁
+        invincible_blink = (self.is_invincible and int(self.invincible_timer * 20) % 2 == 0)
+
+        # KO倒地效果
+        if self.state == FighterState.KO:
+            if sprite is not None:
+                sprite_copy = pygame.transform.rotate(sprite, -90)
+                draw_x = self.x - sprite_copy.get_width() // 2 - camera_x
+                draw_y = self.y - 40
+                if invincible_blink:
+                    sprite_copy.set_alpha(100)
+                surface.blit(sprite_copy, (draw_x, draw_y))
+            else:
+                self._draw_fallback_body(surface, screen_x, "ko")
+            self._draw_projectiles(surface, camera_x)
             return
 
-        # 位置调整 (精灵高度偏移)
-        draw_x = self.x - 48 - camera_x  # 96/2 = 48
-        draw_y = self.y - 63  # 精灵高度
-
-        # 无敌闪烁
-        if self.is_invincible and int(self.invincible_timer * 20) % 2 == 0:
-            sprite.set_alpha(100)
-
-        # KO倒地效果 - 旋转倒地
-        if self.state == FighterState.KO:
-            sprite_copy = pygame.transform.rotate(sprite, -90)
-            draw_x = self.x - sprite_copy.get_width() // 2 - camera_x
-            draw_y = self.y - 40
-            surface.blit(sprite_copy, (draw_x, draw_y))
-        else:
-            # 绘制精灵
+        # 绘制角色身体精灵（或fallback轮廓）
+        if sprite is not None:
+            draw_x = self.x - 48 - camera_x  # 96/2 = 48
+            draw_y = self.y - 63  # 精灵高度
+            if invincible_blink:
+                sprite.set_alpha(100)
             surface.blit(sprite, (draw_x, draw_y))
+        else:
+            self._draw_fallback_body(surface, screen_x, pose)
 
-            # 绘制武器
-            self._draw_weapon(surface, draw_x, draw_y, camera_x)
+        # 绘制武器（挂在手上）
+        self._draw_weapon(surface, screen_x, camera_x)
 
         # 绘制受击特效
         if self.hit_effect_timer > 0:
             pygame.draw.circle(surface, (255, 200, 50),
-                             (int(self.x - camera_x), int(self.y - 80)), 20, 3)
+                             (int(screen_x), int(self.y - 80)), 20, 3)
 
-        # 绘制攻击范围判定框（hitbox可视化）
+        # 绘制攻击范围判定框
         self._draw_attack_range(surface, camera_x)
 
         # 绘制护盾
@@ -865,144 +880,592 @@ class Fighter:
         # 绘制投射物
         self._draw_projectiles(surface, camera_x)
 
-    def _draw_weapon(self, surface: pygame.Surface, draw_x: float, draw_y: float, camera_x: int):
-        """绘制角色武器（sprite形式，定位在手中）"""
-        import math
-        from assets.weapon_assets import WeaponAssets
-
-        char_name = self._char_effect_name
+    def _draw_fallback_body(self, surface: pygame.Surface, screen_x: float, pose: str):
+        """当角色精灵文件缺失时，绘制一个彩色的角色轮廓"""
+        primary = self.stats.color
+        secondary = self.stats.secondary_color
         facing = 1 if self.facing_right else -1
-        char_cx = self.x - camera_x
-        char_cy = self.y
 
+        # 根据姿态调整身体形状
+        is_crouching = (pose == 'crouch')
+        is_walking = (pose == 'walk')
+        is_attacking = 'attack' in pose
+        is_hit = pose in ('hit', 'block')
+
+        if is_crouching:
+            # 蹲下姿势：身体压低
+            body_h = 60
+            body_y = self.y - body_h
+            # 身体
+            pygame.draw.rect(surface, primary,
+                           (int(screen_x - 25), int(body_y), 50, body_h))
+            pygame.draw.rect(surface, secondary,
+                           (int(screen_x - 25), int(body_y), 50, body_h), 2)
+            # 头
+            pygame.draw.ellipse(surface, (240, 195, 160),
+                              (int(screen_x - 12), int(body_y - 20), 24, 24))
+            # 脚
+            pygame.draw.rect(surface, secondary,
+                           (int(screen_x - 28), int(self.y - 8), 20, 8))
+            pygame.draw.rect(surface, secondary,
+                           (int(screen_x + 8), int(self.y - 8), 20, 8))
+        elif is_hit:
+            # 受击姿势：身体后仰
+            body_h = 80
+            body_y = self.y - body_h
+            # 身体（带角度）
+            pygame.draw.rect(surface, primary,
+                           (int(screen_x - 22), int(body_y + 5), 44, body_h - 10))
+            pygame.draw.rect(surface, (255, 80, 80),
+                           (int(screen_x - 22), int(body_y + 5), 44, body_h - 10), 2)
+            # 头
+            pygame.draw.ellipse(surface, (240, 195, 160),
+                              (int(screen_x - 14 + 5 * facing), int(body_y - 12), 24, 24))
+            # 痛苦效果
+            pygame.draw.circle(surface, (255, 100, 100, 120),
+                             (int(screen_x), int(self.y - 100)), 15)
+        elif is_attacking:
+            # 攻击姿势：前倾伸手
+            body_h = 100
+            body_y = self.y - body_h
+            # 身体
+            pygame.draw.rect(surface, primary,
+                           (int(screen_x - 20), int(body_y + 5), 40, body_h - 5))
+            pygame.draw.rect(surface, secondary,
+                           (int(screen_x - 20), int(body_y + 5), 40, body_h - 5), 2)
+            # 攻击手臂（朝前伸出）
+            arm_x = screen_x + 15 * facing
+            pygame.draw.line(surface, (240, 195, 160),
+                           (int(screen_x + 5 * facing), int(body_y + 35)),
+                           (int(arm_x), int(body_y + 30)), 6)
+            # 另一只手
+            pygame.draw.line(surface, (240, 195, 160),
+                           (int(screen_x - 5 * facing), int(body_y + 40)),
+                           (int(screen_x - 15 * facing), int(body_y + 50)), 5)
+            # 头
+            pygame.draw.ellipse(surface, (240, 195, 160),
+                              (int(screen_x - 12), int(body_y - 8), 24, 24))
+            # 腿
+            if is_walking:
+                leg_offset = int(math.sin(pygame.time.get_ticks() * 0.01) * 10)
+            else:
+                leg_offset = 0
+            pygame.draw.line(surface, secondary,
+                           (int(screen_x - 8), int(body_y + body_h - 5)),
+                           (int(screen_x - 12 + leg_offset), int(self.y)), 7)
+            pygame.draw.line(surface, secondary,
+                           (int(screen_x + 8), int(body_y + body_h - 5)),
+                           (int(screen_x + 12 - leg_offset), int(self.y)), 7)
+        elif is_walking:
+            # 走路姿势
+            body_h = 110
+            body_y = self.y - body_h
+            leg_offset = int(math.sin(pygame.time.get_ticks() * 0.01) * 12)
+            # 身体
+            pygame.draw.rect(surface, primary,
+                           (int(screen_x - 20), int(body_y + 10), 40, body_h - 15))
+            pygame.draw.rect(surface, secondary,
+                           (int(screen_x - 20), int(body_y + 10), 40, body_h - 15), 2)
+            # 头
+            pygame.draw.ellipse(surface, (240, 195, 160),
+                              (int(screen_x - 12), int(body_y), 24, 24))
+            # 走路手臂摆动
+            pygame.draw.line(surface, (240, 195, 160),
+                           (int(screen_x + 5 * facing), int(body_y + 30)),
+                           (int(screen_x + 12 * facing + leg_offset), int(body_y + 50)), 6)
+            pygame.draw.line(surface, (240, 195, 160),
+                           (int(screen_x - 5 * facing), int(body_y + 30)),
+                           (int(screen_x - 12 * facing - leg_offset), int(body_y + 50)), 5)
+            # 腿
+            pygame.draw.line(surface, secondary,
+                           (int(screen_x - 8), int(body_y + body_h - 5)),
+                           (int(screen_x - 10 + leg_offset), int(self.y)), 7)
+            pygame.draw.line(surface, secondary,
+                           (int(screen_x + 8), int(body_y + body_h - 5)),
+                           (int(screen_x + 10 - leg_offset), int(self.y)), 7)
+        else:
+            # 默认站立姿势
+            body_h = 110
+            body_y = self.y - body_h
+            # 身体
+            pygame.draw.rect(surface, primary,
+                           (int(screen_x - 20), int(body_y + 10), 40, body_h - 15))
+            pygame.draw.rect(surface, secondary,
+                           (int(screen_x - 20), int(body_y + 10), 40, body_h - 15), 2)
+            # 头
+            pygame.draw.ellipse(surface, (240, 195, 160),
+                              (int(screen_x - 12), int(body_y), 24, 24))
+            # 手臂自然下垂
+            pygame.draw.line(surface, (240, 195, 160),
+                           (int(screen_x + 10 * facing), int(body_y + 30)),
+                           (int(screen_x + 15 * facing), int(body_y + 60)), 6)
+            pygame.draw.line(surface, (240, 195, 160),
+                           (int(screen_x - 10 * facing), int(body_y + 30)),
+                           (int(screen_x - 15 * facing), int(body_y + 60)), 6)
+            # 腿
+            pygame.draw.line(surface, secondary,
+                           (int(screen_x - 8), int(body_y + body_h - 5)),
+                           (int(screen_x - 10), int(self.y)), 7)
+            pygame.draw.line(surface, secondary,
+                           (int(screen_x + 8), int(body_y + body_h - 5)),
+                           (int(screen_x + 10), int(self.y)), 7)
+
+        # 攻击范围发光（如果是攻击状态）
+        if 'attack' in pose and self.is_attacking:
+            glow_surf = pygame.Surface((120, 140), pygame.SRCALPHA)
+            pygame.draw.ellipse(glow_surf, (*primary, 40), (10, 10, 100, 120))
+            surface.blit(glow_surf, (int(screen_x - 60), int(self.y - 150)))
+
+    def _draw_weapon(self, surface: pygame.Surface, screen_x: float, camera_x: int):
+        """绘制角色武器（定位在角色手中）
+
+        所有坐标均为 screen space (screen_x = world_x - camera_x)。
+        武器根据当前姿态(pose)调整手部位置，并按 weapon_type 分发绘制。
+        """
+
+        facing = 1 if self.facing_right else -1
+        pose = self.animator.get_pose_name()
         is_attacking = self.is_attacking and not self.is_special_attacking
+        is_crouching = (pose == 'crouch')
+        is_walking = (pose == 'walk')
 
-        # 帧动画索引（用于老鹰翅膀扑动）
+        # --- 根据姿态计算手部位置（screen space） ---
+        # 角色脚部 screen_y = self.y
+        # 角色精灵顶 screen_y = self.y - 63，精灵宽度96像素，中心在 screen_x
+        # 身体宽度约40像素，手臂从身体侧面延伸约10-15像素
+        if is_crouching:
+            hand_y_offset = -35   # 蹲下时手降低
+        elif is_attacking:
+            hand_y_offset = -60   # 攻击时手抬高并前伸
+        elif is_walking:
+            bob = int(math.sin(pygame.time.get_ticks() * 0.01) * 3)
+            hand_y_offset = -52 + bob
+        else:
+            hand_y_offset = -50   # 站立默认
+
+        # 手部水平位置：手臂末端在身体外侧约 5 像素处
+        # 站立时手臂自然下垂，末端约在 screen_x + 8*facing
+        # 攻击时手臂前伸，约在 screen_x + 30*facing
+        if is_attacking:
+            hand_x = screen_x + 30 * facing
+        else:
+            hand_x = screen_x + 8 * facing
+
+        hand_y = self.y + hand_y_offset
+
+        # 帧动画索引（老鹰翅膀扑动）
         anim_idx = 0
         if is_attacking and self.current_attack:
             total = max(self.current_attack.total_frames, 1)
             anim_idx = int((self.attack_frame / total) * 7) % 7
 
-        # 手部基准偏移（朝向侧）
-        HAND_X = 38    # 朝前方向距角色中心的横向偏移
-        HAND_Y = -52   # 手部距脚部的纵向偏移
-        ATK_EXTRA = 18 # 攻击时额外前伸量
-
-        wx = char_cx + HAND_X * facing
-        wy = char_cy + HAND_Y
-        if is_attacking:
-            wx += ATK_EXTRA * facing
-
-        if "龚大哥" in char_name:
-            self._draw_flag_weapon(surface, wx, wy, facing, is_attacking)
-        elif "军师" in char_name:
-            self._draw_laser_gun_weapon(surface, wx, wy, facing, is_attacking)
-        elif "神秘人" in char_name:
-            self._draw_dagger_weapon(surface, wx, wy, facing, is_attacking)
-        elif "籽桐" in char_name:
-            self._draw_eagle_weapon(surface, wx, wy, facing, is_attacking, anim_idx)
+        # 按 weapon_type 分发
+        weapon_type = self.weapon_data.weapon_type
+        if weapon_type == WeaponType.FLAG:
+            self._draw_flag_weapon(surface, hand_x, hand_y, facing, is_attacking)
+        elif weapon_type == WeaponType.LASER:
+            self._draw_gun_weapon(surface, hand_x, hand_y, facing, is_attacking)
+        elif weapon_type == WeaponType.DAGGER:
+            self._draw_dagger_weapon(surface, hand_x, hand_y, facing, is_attacking)
+        elif weapon_type == WeaponType.EAGLE:
+            self._draw_eagle_weapon(surface, hand_x, hand_y, facing, is_attacking, anim_idx)
+        elif weapon_type == WeaponType.PISTOL:
+            self._draw_gun_weapon(surface, hand_x, hand_y, facing, is_attacking)
+        elif weapon_type == WeaponType.RIFLE:
+            self._draw_rifle_weapon(surface, hand_x, hand_y, facing, is_attacking)
+        elif weapon_type == WeaponType.NUNCHAKU:
+            self._draw_nunchaku_weapon(surface, hand_x, hand_y, facing, is_attacking)
+        elif weapon_type == WeaponType.SHURIKEN:
+            self._draw_shuriken_weapon(surface, hand_x, hand_y, facing, is_attacking)
+        else:
+            self._draw_fist_weapon(surface, hand_x, hand_y, facing, is_attacking)
 
     def _flip(self, surf: pygame.Surface) -> pygame.Surface:
         """左右翻转sprite"""
         return pygame.transform.flip(surf, True, False)
 
-    def _draw_flag_weapon(self, surface, wx, wy, facing, is_attacking):
-        """龚大哥：五星红旗（五星红旗握在手中）"""
-        import math
+    def _get_weapon_sprite(self, sprite_key: str) -> pygame.Surface:
+        """从 WeaponAssets 加载 sprite，失败返回 1x1 placeholder"""
+        if not WeaponAssets._loaded:
+            WeaponAssets._ensure_loaded()
+        return WeaponAssets.get(sprite_key)
+
+    # ------------------------------------------------------------------
+    # 各武器绘制方法（screen space）
+    # ------------------------------------------------------------------
+
+    def _draw_fist_weapon(self, surface, hand_x, hand_y, facing, is_attacking):
+        """拳头（徒手）"""
+        fist_w, fist_h = 22, 18
+        fx = hand_x - fist_w // 2
+        fy = hand_y - fist_h // 2
+        # 主体
+        pygame.draw.ellipse(surface, (220, 180, 140), (int(fx), int(fy), fist_w, fist_h))
+        pygame.draw.ellipse(surface, (240, 200, 160), (int(fx + 2), int(fy + 2), fist_w - 4, fist_h - 6))
+        # 指节
+        for i in range(3):
+            px = fx + 4 + i * 5
+            pygame.draw.line(surface, (200, 160, 120), (px, fy + fist_h - 3), (px, fy + fist_h), 2)
+        if is_attacking:
+            glow_s = pygame.Surface((fist_w + 8, fist_h + 8), pygame.SRCALPHA)
+            pygame.draw.ellipse(glow_s, (255, 200, 100, 60), glow_s.get_rect())
+            surface.blit(glow_s, (int(fx - 4), int(fy - 4)))
+
+    def _draw_flag_weapon(self, surface, hand_x, hand_y, facing, is_attacking):
+        """五星红旗（旗杆握在手中）"""
         wave = math.sin(pygame.time.get_ticks() * 0.006) * 6
         if is_attacking:
             wave *= 2.0
-        # 旗杆（金色）
-        pygame.draw.line(surface, (210, 170, 50), (int(wx), int(wy)),
-                       (int(wx + 8 * facing), int(wy + 36)), 5)
-        # 红旗（红色）
-        fx = wx + 8 * facing + wave * facing
-        fy = wy + 36 - 24
-        pygame.draw.rect(surface, (220, 30, 30), (int(fx), int(fy), int(32 * facing), 22))
-        pygame.draw.rect(surface, (160, 15, 15), (int(fx), int(fy), int(32 * facing), 22), 1)
+        # 旗杆
+        pole_x = hand_x
+        pole_top_y = hand_y
+        pole_end_x = hand_x + 8 * facing
+        pole_end_y = hand_y + 38
+        pygame.draw.line(surface, (210, 170, 50), (int(pole_x), int(pole_top_y)),
+                       (int(pole_end_x), int(pole_end_y)), 5)
+        # 红旗
+        fx = pole_end_x + wave * facing
+        fy = pole_end_y - 26
+        pygame.draw.rect(surface, (220, 30, 30), (int(fx), int(fy), int(34 * facing), 22))
+        pygame.draw.rect(surface, (160, 15, 15), (int(fx), int(fy), int(34 * facing), 22), 1)
         # 五角星
-        star_x = fx + 10 * facing
+        star_x = fx + 12 * facing
         star_y = fy + 11
-        sr = 6
         pts = []
         for i in range(5):
             oa = math.radians(90 + i * 72)
             ia = math.radians(90 + i * 72 + 36)
-            pts.append((star_x + math.cos(oa) * sr, star_y - math.sin(oa) * sr))
-            pts.append((star_x + math.cos(ia) * sr * 0.38, star_y - math.sin(ia) * sr * 0.38))
+            pts.append((star_x + math.cos(oa) * 6, star_y - math.sin(oa) * 6))
+            pts.append((star_x + math.cos(ia) * 6 * 0.38, star_y - math.sin(ia) * 6 * 0.38))
         if len(pts) >= 10:
             pygame.draw.polygon(surface, (255, 220, 0), pts)
 
-    def _draw_laser_gun_weapon(self, surface, wx, wy, facing, is_attacking):
-        """军师：激光枪（Eradication Wars CC0 sprite）"""
-        from assets.weapon_assets import WeaponAssets
-        sprite = WeaponAssets.get('laser_gun')
-        if sprite.get_size() == (1, 1):
-            return  # 未加载成功则跳过
-        # 缩小到合适大小（约56px宽）
-        w, h = sprite.get_size()
-        scale = min(56.0 / w, 28.0 / h)
-        new_w = max(1, int(w * scale))
-        new_h = max(1, int(h * scale))
-        sprite = pygame.transform.smoothscale(sprite, (new_w, new_h))
-        if facing < 0:
-            sprite = self._flip(sprite)
-        # 枪柄朝下，枪口朝前
-        rx = wx - sprite.get_width() // 2
-        ry = wy - sprite.get_height() // 2
-        surface.blit(sprite, (int(rx), int(ry)))
-        # 能量指示灯（如果角色在攻击则更亮）
+    def _draw_gun_weapon(self, surface, hand_x, hand_y, facing, is_attacking):
+        """激光枪 / 手枪 / 小型枪械（共用渲染）
+        优先使用 era_weapons 中的 pistol_gun.png（52x24），
+        备用 WeaponData.sprite_key（如 laser_gun）。
+        如果所有资源都缺失，则使用程序化绘制。"""
+        sprite_key = self.weapon_data.sprite_key
+        sprite_loaded = False
+        orig_size = (1, 1)
+        grip_px = self.weapon_data.grip_px
+
+        # pistol_gun 优先
+        sprite = self._get_weapon_sprite('pistol_gun')
+        if sprite.get_size() != (1, 1):
+            orig_size = sprite.get_size()
+            sprite_loaded = True
+        elif self._get_weapon_sprite(sprite_key).get_size() != (1, 1):
+            sprite = self._get_weapon_sprite(sprite_key)
+            orig_size = sprite.get_size()
+            sprite_loaded = True
+        elif self._get_weapon_sprite('weapon_p_45').get_size() != (1, 1):
+            sprite = self._get_weapon_sprite('weapon_p_45')
+            orig_size = sprite.get_size()
+            sprite_loaded = True
+
+        if sprite_loaded:
+            target_h = 28
+            scale = target_h / orig_size[1]
+            new_w = max(1, int(orig_size[0] * scale))
+            new_h = max(1, int(orig_size[1] * scale))
+            sprite = pygame.transform.smoothscale(sprite, (new_w, new_h))
+            if facing < 0:
+                sprite = self._flip(sprite)
+            blit_x = hand_x - grip_px
+            blit_y = hand_y - new_h // 2
+            surface.blit(sprite, (int(blit_x), int(blit_y)))
+            tip_x = hand_x + (new_w - grip_px) * facing
+        else:
+            # 程序化备用：绘制科幻激光枪
+            self._draw_laser_gun_procedural(surface, hand_x, hand_y, facing, is_attacking)
+            tip_x = hand_x + 22 * facing
+
+        # 能量/枪口光效
         glow = abs(math.sin(pygame.time.get_ticks() * 0.015))
-        intensity = 0.5 + 0.5 * glow
-        if is_attacking:
-            intensity = 1.0
+        intensity = 1.0 if is_attacking else (0.5 + 0.5 * glow)
         glow_c = (int(30 * intensity), int(180 * intensity), 255)
-        pygame.draw.circle(surface, glow_c, (int(wx + (new_w // 2 - 4) * facing), int(wy)), int(3 + glow * 2))
+        pygame.draw.circle(surface, glow_c, (int(tip_x), int(hand_y)), int(3 + glow * 2))
 
-    def _draw_dagger_weapon(self, surface, wx, wy, facing, is_attacking):
-        """神秘人：军用匕首（64x64 CC0 sprite）"""
-        from assets.weapon_assets import WeaponAssets
-        sprite = WeaponAssets.get('dagger')
-        if sprite.get_size() == (1, 1):
-            return
-        # 缩小到约48px宽
-        w, h = sprite.get_size()
-        scale = min(48.0 / w, 24.0 / h)
-        new_w = max(1, int(w * scale))
-        new_h = max(1, int(h * scale))
-        sprite = pygame.transform.smoothscale(sprite, (new_w, new_h))
-        if facing < 0:
-            sprite = self._flip(sprite)
-        rx = wx - sprite.get_width() // 2
-        ry = wy - sprite.get_height() // 2
-        surface.blit(sprite, (int(rx), int(ry)))
-        # 攻击时加个反光
+    def _draw_laser_gun_procedural(self, surface, hand_x, hand_y, facing, is_attacking):
+        """程序化绘制科幻激光枪（备用方案）"""
+        # 枪身（深蓝灰色矩形）
+        gun_color = (60, 60, 90)
+        body_x = hand_x - 6
+        body_y = hand_y - 10
+        pygame.draw.rect(surface, gun_color, (int(body_x), int(body_y), 28, 20))
+        pygame.draw.rect(surface, (80, 80, 110), (int(body_x), int(body_y), 28, 20), 1)
+
+        # 枪管
+        barrel_x = hand_x + 22 * facing
+        pygame.draw.rect(surface, (50, 50, 80), (int(min(body_x, barrel_x)), int(body_y + 5), abs(barrel_x - body_x) + 8, 10))
+        pygame.draw.rect(surface, (70, 70, 100), (int(min(body_x, barrel_x)), int(body_y + 5), abs(barrel_x - body_x) + 8, 10), 1)
+
+        # 能量指示灯（蓝色发光条）
+        indicator_x = hand_x - 3
+        indicator_y = body_y + 3
+        pygame.draw.rect(surface, (30, 180, 255), (int(indicator_x), int(indicator_y), 16, 4))
+        glow = abs(math.sin(pygame.time.get_ticks() * 0.01))
+        pygame.draw.rect(surface, (100, 220, 255), (int(indicator_x), int(indicator_y), int(16 * (0.5 + 0.5 * glow)), 4))
+
+        # 握把
+        pygame.draw.rect(surface, (40, 40, 60), (int(body_x + 5), int(body_y + 18), 10, 10))
+        pygame.draw.rect(surface, (60, 60, 80), (int(body_x + 5), int(body_y + 18), 10, 10), 1)
+
+        # 攻击时枪口加亮
         if is_attacking:
-            glow_surf = pygame.Surface((sprite.get_width() + 8, sprite.get_height() + 8), pygame.SRCALPHA)
-            pygame.draw.rect(glow_surf, (180, 200, 240, 60), glow_surf.get_rect(), border_radius=4)
-            surface.blit(glow_surf, (int(rx - 4), int(ry - 4)))
+            glow_s = pygame.Surface((40, 30), pygame.SRCALPHA)
+            pygame.draw.ellipse(glow_s, (50, 150, 255, 80), glow_s.get_rect())
+            surface.blit(glow_s, (int(hand_x + 20 * facing - 20), int(hand_y - 15)))
 
-    def _draw_eagle_weapon(self, surface, wx, wy, facing, is_attacking, anim_idx):
-        """籽桐：老鹰（287x21 spritesheet，7帧 CC0 sprite）"""
-        from assets.weapon_assets import WeaponAssets
-        sprite = WeaponAssets.get_frame('eagle_frames', anim_idx)
+    def _draw_rifle_weapon(self, surface, hand_x, hand_y, facing, is_attacking):
+        """突击步枪（smg_flag 52x24，缩放到更长）"""
+        sprite = self._get_weapon_sprite('smg_flag')
+        if sprite.get_size() == (1, 1):
+            sprite = self._get_weapon_sprite('weapon_s_01')
         if sprite.get_size() == (1, 1):
             return
-        # 放大到约80px宽
-        w, h = sprite.get_size()
-        scale = 80.0 / w
-        new_w = max(1, int(w * scale))
-        new_h = max(1, int(h * scale))
+
+        orig_w, orig_h = sprite.get_size()
+        target_h = 30
+        scale = target_h / orig_h
+        new_w = max(1, int(orig_w * scale))
+        new_h = max(1, int(orig_h * scale))
         sprite = pygame.transform.smoothscale(sprite, (new_w, new_h))
         if facing < 0:
             sprite = self._flip(sprite)
-        rx = wx - sprite.get_width() // 2
-        ry = wy - sprite.get_height() // 2
-        surface.blit(sprite, (int(rx), int(ry)))
+
+        grip_px = self.weapon_data.grip_px
+        surface.blit(sprite, (int(hand_x - grip_px), int(hand_y - new_h // 2)))
+
+        # 攻击时枪口闪光
+        if is_attacking:
+            flash = pygame.Surface((12, 12), pygame.SRCALPHA)
+            pygame.draw.circle(flash, (255, 200, 50, 200), (6, 6), 5)
+            surface.blit(flash, (int(hand_x + (new_w - grip_px) * facing - 6), int(hand_y - 6)))
+
+    def _draw_dagger_weapon(self, surface, hand_x, hand_y, facing, is_attacking):
+        """军用匕首（era_weapons/knife.png 48x22，斜向下握持）
+        备用：程序化绘制金色匕首"""
+        sprite = self._get_weapon_sprite('knife')
+        if sprite.get_size() == (1, 1):
+            sprite = self._get_weapon_sprite(self.weapon_data.sprite_key)
+
+        if sprite.get_size() != (1, 1):
+            orig_w, orig_h = sprite.get_size()
+            target_h = 32
+            scale = target_h / orig_h
+            new_w = max(1, int(orig_w * scale))
+            new_h = max(1, int(orig_h * scale))
+            sprite = pygame.transform.smoothscale(sprite, (new_w, new_h))
+            if facing < 0:
+                sprite = self._flip(sprite)
+            sprite = pygame.transform.rotate(sprite, 45 * facing)
+            rw, rh = sprite.get_size()
+            blit_x = hand_x - rw // 2
+            blit_y = hand_y - rh // 2
+            surface.blit(sprite, (int(blit_x), int(blit_y)))
+        else:
+            # 程序化备用：绘制金色匕首
+            self._draw_dagger_procedural(surface, hand_x, hand_y, facing, is_attacking)
+
+        if is_attacking:
+            glow_s = pygame.Surface((50, 50), pygame.SRCALPHA)
+            pygame.draw.ellipse(glow_s, (180, 200, 240, 60), glow_s.get_rect())
+            surface.blit(glow_s, (int(hand_x - 25), int(hand_y - 25)))
+
+    def _draw_dagger_procedural(self, surface, hand_x, hand_y, facing, is_attacking):
+        """程序化绘制金色匕首（备用方案）"""
+        # 匕首长度
+        dagger_len = 35
+        # 刀柄颜色（金色）
+        handle_color = (160, 130, 80)
+        handle_dark = (120, 90, 50)
+        # 刀刃颜色（银白色）
+        blade_color = (220, 220, 240)
+        blade_edge = (180, 180, 200)
+
+        # 计算匕首方向（斜向下45度）
+        angle = math.radians(45) if facing > 0 else math.radians(135)
+        cos_a = math.cos(angle)
+        sin_a = math.sin(angle)
+
+        # 刀柄起点（手部位置）
+        hx = hand_x
+        hy = hand_y
+
+        # 刀柄末端
+        kx = hx + int(cos_a * 12)
+        ky = hy + int(sin_a * 12)
+
+        # 刀刃起点
+        bx = kx
+        by = ky
+
+        # 刀刃末端（刀尖）
+        tx = hx + int(cos_a * dagger_len)
+        ty = hy + int(sin_a * dagger_len)
+
+        # 绘制刀柄
+        pygame.draw.line(surface, handle_color, (int(hx), int(hy)), (int(kx), int(ky)), 6)
+        pygame.draw.line(surface, handle_dark, (int(hx), int(hy)), (int(kx), int(ky)), 2)
+
+        # 绘制刀格（护手）
+        guard_x = bx
+        guard_y = by
+        pygame.draw.ellipse(surface, (200, 180, 100), (int(guard_x - 4), int(guard_y - 4), 8, 8))
+
+        # 绘制刀刃（三角形）
+        # 刀背
+        pygame.draw.line(surface, blade_color, (int(bx), int(by)), (int(tx), int(ty)), 4)
+        # 刀刃线
+        perp_x = -sin_a * 5
+        perp_y = cos_a * 5
+        pygame.draw.line(surface, blade_edge, (int(bx + perp_x), int(by + perp_y)), (int(tx + perp_x), int(ty + perp_y)), 2)
+        # 刀尖
+        tip_x = tx
+        tip_y = ty
+        pygame.draw.circle(surface, (255, 255, 255), (int(tip_x), int(tip_y)), 2)
+
+        # 刀身光泽效果
+        if is_attacking:
+            glow_s = pygame.Surface((50, 50), pygame.SRCALPHA)
+            pygame.draw.ellipse(glow_s, (200, 220, 255, 80), glow_s.get_rect())
+            surface.blit(glow_s, (int(hand_x - 25 + cos_a * 15), int(hand_y - 25 + sin_a * 15)))
+
+    def _draw_eagle_weapon(self, surface, hand_x, hand_y, facing, is_attacking, anim_idx):
+        """白头海雕（eagle_flap.png spritesheet，7帧）
+        备用：程序化绘制展翅老鹰"""
+        sprite = WeaponAssets.get_frame('eagle_frames', anim_idx)
+        if sprite.get_size() != (1, 1):
+            orig_w, orig_h = sprite.get_size()
+            new_w, new_h = 60, max(1, int(orig_h * (60.0 / orig_w)))
+            sprite = pygame.transform.smoothscale(sprite, (new_w, new_h))
+            if facing < 0:
+                sprite = self._flip(sprite)
+            surface.blit(sprite, (int(hand_x - new_w // 2), int(hand_y - new_h // 2)))
+        else:
+            # 程序化备用：绘制一只展翅老鹰
+            self._draw_eagle_procedural(surface, hand_x, hand_y, facing, is_attacking, anim_idx)
+
+    def _draw_eagle_procedural(self, surface, hand_x, hand_y, facing, is_attacking, anim_idx):
+        """程序化绘制白头海雕（备用方案）"""
+        # 翅膀扑动动画
+        flap_angle = math.sin(pygame.time.get_ticks() * 0.015) * 0.4
+        wing_span = 30 + int(abs(math.sin(pygame.time.get_ticks() * 0.015)) * 10)
+
+        # 身体（椭圆形）
+        body_color = (100, 70, 40)
+        pygame.draw.ellipse(surface, body_color, (int(hand_x - 8), int(hand_y - 6), 16, 12))
+
+        # 头（白色）
+        head_x = hand_x + 6 * facing
+        pygame.draw.ellipse(surface, (240, 240, 240), (int(head_x - 5), int(hand_y - 10), 10, 10))
+
+        # 喙（黄色）
+        beak_x = hand_x + 10 * facing
+        pygame.draw.polygon(surface, (255, 200, 0), [
+            (int(beak_x), int(hand_y - 7)),
+            (int(beak_x + 6 * facing), int(hand_y - 5)),
+            (int(beak_x), int(hand_y - 3)),
+        ])
+
+        # 眼睛
+        pygame.draw.circle(surface, (0, 0, 0), (int(head_x + 2 * facing), int(hand_y - 8)), 2)
+
+        # 左翅膀
+        wx1 = hand_x - 5
+        wy1 = hand_y - 4
+        wtip_x = hand_x - wing_span - int(flap_angle * 8)
+        wtip_y = hand_y - 15 + int(abs(flap_angle) * 5)
+        pygame.draw.polygon(surface, (120, 90, 60), [
+            (int(wx1), int(wy1)),
+            (int(wtip_x), int(wtip_y)),
+            (int(wx1 - 5), int(wtip_y + 8)),
+        ])
+
+        # 右翅膀
+        wx2 = hand_x + 5
+        wtip2_x = hand_x + wing_span + int(flap_angle * 8)
+        wtip2_y = hand_y - 15 + int(abs(flap_angle) * 5)
+        pygame.draw.polygon(surface, (120, 90, 60), [
+            (int(wx2), int(wy1)),
+            (int(wtip2_x), int(wtip2_y)),
+            (int(wx2 + 5), int(wtip2_y + 8)),
+        ])
+
+        # 尾巴
+        pygame.draw.polygon(surface, (80, 60, 40), [
+            (int(hand_x - 6), int(hand_y + 4)),
+            (int(hand_x - 15 * facing), int(hand_y + 10)),
+            (int(hand_x - 5), int(hand_y + 8)),
+        ])
+
+        # 攻击时光效
+        if is_attacking:
+            glow_s = pygame.Surface((60, 50), pygame.SRCALPHA)
+            pygame.draw.ellipse(glow_s, (200, 180, 100, 60), glow_s.get_rect())
+            surface.blit(glow_s, (int(hand_x - 30), int(hand_y - 25)))
+
+    def _draw_nunchaku_weapon(self, surface, hand_x, hand_y, facing, is_attacking):
+        """双截棍（procedural）"""
+        # 动画：双节棍随时间摆动
+        t = pygame.time.get_ticks()
+        angle1 = math.sin(t * 0.008) * 0.6
+        angle2 = math.sin(t * 0.008 + 1.5) * 0.6
+        cx, cy = int(hand_x), int(hand_y)
+
+        # 第一截
+        end1_x = cx + int(math.cos(angle1) * 16)
+        end1_y = cy + int(math.sin(angle1) * 16) + 10
+        pygame.draw.line(surface, (180, 140, 80), (cx, cy), (end1_x, end1_y), 4)
+        pygame.draw.ellipse(surface, (220, 170, 100), (end1_x - 5, end1_y - 3, 10, 6))
+
+        # 连接链
+        pygame.draw.line(surface, (160, 160, 170), (end1_x, end1_y),
+                        (end1_x + int(math.cos(angle2) * 6), end1_y + int(math.sin(angle2) * 6)), 2)
+
+        # 第二截
+        end2_x = end1_x + int(math.cos(angle1 + angle2) * 16)
+        end2_y = end1_y + int(math.sin(angle1 + angle2) * 16) + 10
+        pygame.draw.line(surface, (180, 140, 80), (end1_x, end1_y), (end2_x, end2_y), 4)
+        pygame.draw.ellipse(surface, (220, 170, 100), (end2_x - 5, end2_y - 3, 10, 6))
+
+        if is_attacking:
+            glow_s = pygame.Surface((40, 40), pygame.SRCALPHA)
+            pygame.draw.circle(glow_s, (255, 220, 100, 60), (20, 20), 16)
+            surface.blit(glow_s, (int(end2_x - 20), int(end2_y - 20)))
+
+    def _draw_shuriken_weapon(self, surface, hand_x, hand_y, facing, is_attacking):
+        """手里剑（procedural + era_weapons 备用）"""
+        t = pygame.time.get_ticks()
+        rot = t * 0.01
+        cx, cy = int(hand_x), int(hand_y)
+        r = 12
+
+        # 尝试从 WeaponAssets 加载手里剑 sprite
+        sprite = self._get_weapon_sprite('weapon_s_08')
+        if sprite.get_size() != (1, 1):
+            sprite = pygame.transform.rotate(sprite, math.degrees(rot))
+            sw, sh = sprite.get_size()
+            surface.blit(sprite, (int(cx - sw // 2), int(cy - sh // 2)))
+        else:
+            # Procedural 手里剑
+            pts = [(cx, cy - r), (cx + 3, cy - 3), (cx + r, cy),
+                   (cx + 3, cy + 3), (cx, cy + r), (cx - 3, cy + 3),
+                   (cx - r, cy), (cx - 3, cy - 3)]
+            pygame.draw.polygon(surface, (180, 180, 190), pts)
+            pygame.draw.circle(surface, (80, 80, 90), (cx, cy), 3)
+
+        if is_attacking:
+            for i in range(4):
+                tx = cx + int(math.cos(rot + i * math.pi / 2) * (r + 8))
+                ty = cy + int(math.sin(rot + i * math.pi / 2) * (r + 8))
+                pygame.draw.circle(surface, (200, 200, 220), (tx, ty), 2)
 
     def _draw_projectiles(self, surface: pygame.Surface, camera_x: int):
-        """绘制投射物"""
-        import math
+        """绘制投射物（按 weapon_type 分发）"""
+        weapon_type = self.weapon_data.weapon_type
 
         for proj in self.projectile_manager.projectiles:
             if not proj.active:
@@ -1012,134 +1475,156 @@ class Fighter:
             screen_y = proj.y
             dir_sign = proj.direction
 
-            char_name = getattr(proj, 'char_name', '龚大哥')
+            if weapon_type == WeaponType.FLAG:
+                self._draw_proj_flag(surface, screen_x, screen_y, dir_sign)
+            elif weapon_type in (WeaponType.LASER, WeaponType.PISTOL, WeaponType.RIFLE):
+                self._draw_proj_laser(surface, screen_x, screen_y, dir_sign)
+            elif weapon_type == WeaponType.DAGGER:
+                self._draw_proj_dagger(surface, screen_x, screen_y, dir_sign)
+            elif weapon_type == WeaponType.EAGLE:
+                self._draw_proj_eagle(surface, screen_x, screen_y, dir_sign)
+            elif weapon_type == WeaponType.NUNCHAKU:
+                self._draw_proj_nunchaku(surface, screen_x, screen_y, dir_sign)
+            elif weapon_type == WeaponType.SHURIKEN:
+                self._draw_proj_shuriken(surface, screen_x, screen_y, dir_sign)
+            else:
+                self._draw_proj_default(surface, screen_x, screen_y, dir_sign)
 
-            # 龚大哥 - 红旗（旋转飞行）
-            if "龚大哥" in char_name:
-                flag_w, flag_h = 30, 20
-                # 旗杆
-                pole_x1 = screen_x - 12 * dir_sign
-                pole_y1 = screen_y - 5
-                pole_x2 = screen_x + 8 * dir_sign
-                pole_y2 = screen_y - 20
-                pygame.draw.line(surface, (200, 160, 50), (int(pole_x1), int(pole_y1)),
-                               (int(pole_x2), int(pole_y2)), 2)
-                # 旗面
-                pygame.draw.rect(surface, (220, 30, 30),
-                               (int(pole_x2), int(pole_y2), int(flag_w * dir_sign), flag_h))
-                # 五角星
-                star_cx = pole_x2 + 7 * dir_sign
-                star_cy = pole_y2 + flag_h // 2
-                star_r = 5
-                points = []
-                for i in range(5):
-                    outer_angle = math.radians(90 + i * 72)
-                    inner_angle = math.radians(90 + i * 72 + 36)
-                    points.append((star_cx + math.cos(outer_angle) * star_r,
-                                  star_cy - math.sin(outer_angle) * star_r))
-                    points.append((star_cx + math.cos(inner_angle) * (star_r * 0.38),
-                                  star_cy - math.sin(inner_angle) * (star_r * 0.38)))
-                if len(points) >= 10:
-                    pygame.draw.polygon(surface, (255, 220, 0), points)
-                # 拖尾
-                for i in range(3):
-                    trail_surf = pygame.Surface((10, 10), pygame.SRCALPHA)
-                    pygame.draw.circle(trail_surf, (255, 100, 50, 100 - i * 30), (5, 5), 4)
-                    surface.blit(trail_surf, (int(screen_x - 15 * dir_sign * (i + 1) - 5), int(screen_y - 5)))
+    def _draw_proj_flag(self, surface, screen_x, screen_y, dir_sign):
+        """投射物：红旗"""
+        flag_w, flag_h = 30, 20
+        pole_x1 = screen_x - 12 * dir_sign
+        pole_y1 = screen_y - 5
+        pole_x2 = screen_x + 8 * dir_sign
+        pole_y2 = screen_y - 20
+        pygame.draw.line(surface, (200, 160, 50), (int(pole_x1), int(pole_y1)),
+                       (int(pole_x2), int(pole_y2)), 2)
+        pygame.draw.rect(surface, (220, 30, 30),
+                       (int(pole_x2), int(pole_y2), int(flag_w * dir_sign), flag_h))
+        star_cx = pole_x2 + 7 * dir_sign
+        star_cy = pole_y2 + flag_h // 2
+        points = []
+        for i in range(5):
+            oa = math.radians(90 + i * 72)
+            ia = math.radians(90 + i * 72 + 36)
+            points.append((star_cx + math.cos(oa) * 5, star_cy - math.sin(oa) * 5))
+            points.append((star_cx + math.cos(ia) * 5 * 0.38, star_cy - math.sin(ia) * 5 * 0.38))
+        if len(points) >= 10:
+            pygame.draw.polygon(surface, (255, 220, 0), points)
+        for i in range(3):
+            ts = pygame.Surface((10, 10), pygame.SRCALPHA)
+            pygame.draw.circle(ts, (255, 100, 50, 100 - i * 30), (5, 5), 4)
+            surface.blit(ts, (int(screen_x - 15 * dir_sign * (i + 1) - 5), int(screen_y - 5)))
 
-            # 军师 - 激光束
-            elif "军师" in char_name:
-                beam_len = 50 * dir_sign
-                # 外层光晕
-                pygame.draw.line(surface, (50, 100, 255, 100),
-                               (int(screen_x), int(screen_y - 5)),
-                               (int(screen_x + beam_len), int(screen_y - 5)), 8)
-                pygame.draw.line(surface, (80, 130, 255, 150),
-                               (int(screen_x), int(screen_y)),
-                               (int(screen_x + beam_len), int(screen_y)), 5)
-                # 核心
-                pygame.draw.line(surface, (200, 220, 255),
-                               (int(screen_x), int(screen_y)),
-                               (int(screen_x + beam_len), int(screen_y)), 2)
-                # 能量粒子
-                for i in range(5):
-                    px = screen_x + (i * 12 + (pygame.time.get_ticks() // 30) % 12) * dir_sign
-                    if 0 < px < 1280:
-                        pygame.draw.circle(surface, (150, 200, 255),
-                                         (int(px), int(screen_y + (i % 3 - 1) * 4)), 2)
-                # 枪口火焰
-                muzzle_surf = pygame.Surface((16, 16), pygame.SRCALPHA)
-                pygame.draw.circle(muzzle_surf, (100, 200, 255, 200), (8, 8), 7)
-                pygame.draw.circle(muzzle_surf, (200, 240, 255, 150), (8, 8), 4)
-                surface.blit(muzzle_surf, (int(screen_x - 8), int(screen_y - 8)))
+    def _draw_proj_laser(self, surface, screen_x, screen_y, dir_sign):
+        """投射物：激光束"""
+        beam_len = 50 * dir_sign
+        pygame.draw.line(surface, (50, 100, 255, 100),
+                       (int(screen_x), int(screen_y - 5)),
+                       (int(screen_x + beam_len), int(screen_y - 5)), 8)
+        pygame.draw.line(surface, (80, 130, 255, 150),
+                       (int(screen_x), int(screen_y)),
+                       (int(screen_x + beam_len), int(screen_y)), 5)
+        pygame.draw.line(surface, (200, 220, 255),
+                       (int(screen_x), int(screen_y)),
+                       (int(screen_x + beam_len), int(screen_y)), 2)
+        for i in range(5):
+            px = screen_x + (i * 12 + (pygame.time.get_ticks() // 30) % 12) * dir_sign
+            if 0 < px < 1280:
+                pygame.draw.circle(surface, (150, 200, 255),
+                                 (int(px), int(screen_y + (i % 3 - 1) * 4)), 2)
+        muzzle = pygame.Surface((16, 16), pygame.SRCALPHA)
+        pygame.draw.circle(muzzle, (100, 200, 255, 200), (8, 8), 7)
+        pygame.draw.circle(muzzle, (200, 240, 255, 150), (8, 8), 4)
+        surface.blit(muzzle, (int(screen_x - 8), int(screen_y - 8)))
 
-            # 神秘人 - 星条旗
-            elif "神秘人" in char_name:
-                flag_w, flag_h = 24, 16
-                fx = screen_x - 10 * dir_sign
-                fy = screen_y - 8
-                # 蓝色区域
-                pygame.draw.rect(surface, (30, 50, 150), (int(fx), int(fy), int(10 * dir_sign), 8))
-                # 白条
-                for i in range(1, 7, 2):
-                    pygame.draw.line(surface, (240, 240, 240),
-                                   (fx, fy + i), (fx + flag_w * dir_sign, fy + i), 2)
-                # 红条
-                for i in range(2, 7, 2):
-                    pygame.draw.line(surface, (180, 20, 20),
-                                  (fx, fy + i), (fx + flag_w * dir_sign, fy + i), 2)
-                # 边框
-                pygame.draw.rect(surface, (240, 240, 240), (int(fx), int(fy), int(flag_w * dir_sign), flag_h), 1)
-                # 拖尾
-                for i in range(3):
-                    trail_surf = pygame.Surface((8, 8), pygame.SRCALPHA)
-                    pygame.draw.circle(trail_surf, (80, 80, 100, 80 - i * 25), (4, 4), 3)
-                    surface.blit(trail_surf, (int(screen_x - 12 * dir_sign * (i + 1) - 4), int(screen_y - 4)))
+    def _draw_proj_dagger(self, surface, screen_x, screen_y, dir_sign):
+        """投射物：星条旗（匕首投射形态）"""
+        flag_w, flag_h = 24, 16
+        fx = screen_x - 10 * dir_sign
+        fy = screen_y - 8
+        pygame.draw.rect(surface, (30, 50, 150), (int(fx), int(fy), int(10 * dir_sign), 8))
+        for i in range(1, 7, 2):
+            pygame.draw.line(surface, (240, 240, 240), (fx, fy + i), (fx + flag_w * dir_sign, fy + i), 2)
+        for i in range(2, 7, 2):
+            pygame.draw.line(surface, (180, 20, 20), (fx, fy + i), (fx + flag_w * dir_sign, fy + i), 2)
+        pygame.draw.rect(surface, (240, 240, 240), (int(fx), int(fy), int(flag_w * dir_sign), flag_h), 1)
+        for i in range(3):
+            ts = pygame.Surface((8, 8), pygame.SRCALPHA)
+            pygame.draw.circle(ts, (80, 80, 100, 80 - i * 25), (4, 4), 3)
+            surface.blit(ts, (int(screen_x - 12 * dir_sign * (i + 1) - 4), int(screen_y - 4)))
 
-            # 籽桐 - 老鹰
-            elif "籽桐" in char_name:
-                flap = math.sin(pygame.time.get_ticks() * 0.02) * 8
-                body_cx = screen_x
-                body_cy = screen_y
-                # 身体
-                pygame.draw.ellipse(surface, (139, 90, 43), (int(body_cx - 10), int(body_cy - 6), 20, 12))
-                # 翅膀（左+右展开）
-                wing_color = (120, 80, 35)
-                # 左翼
-                wx1 = body_cx - 5
-                wy1 = body_cy - 2
-                wtip1_x = body_cx - 25 - int(flap)
-                wtip1_y = body_cy - 15 + int(abs(flap) * 0.5)
-                pygame.draw.line(surface, wing_color, (int(wx1), int(wy1)), (int(wtip1_x), int(wtip1_y)), 3)
-                pygame.draw.line(surface, wing_color, (int(wx1), int(wy1 + 2)), (int(wtip1_x), int(wtip1_y + 8)), 3)
-                # 右翼
-                wtip2_x = body_cx + 25 + int(flap)
-                wtip2_y = body_cy - 15 + int(abs(flap) * 0.5)
-                pygame.draw.line(surface, wing_color, (int(body_cx + 5), int(wy1)), (int(wtip2_x), int(wtip2_y)), 3)
-                pygame.draw.line(surface, wing_color, (int(body_cx + 5), int(wy1 + 2)), (int(wtip2_x), int(wtip2_y + 8)), 3)
-                # 头+喙
-                head_x = body_cx + 10 * dir_sign
-                head_y = body_cy - 4
-                pygame.draw.ellipse(surface, (139, 90, 43), (int(head_x - 5), int(head_y - 5), 10, 10))
-                pygame.draw.polygon(surface, (255, 200, 0), [
-                    (int(head_x + 5 * dir_sign), int(head_y - 2)),
-                    (int(head_x + 12 * dir_sign), int(head_y)),
-                    (int(head_x + 5 * dir_sign), int(head_y + 2))
-                ])
-                # 眼睛
-                eye_x = head_x + 3 * dir_sign
-                pygame.draw.circle(surface, (0, 0, 0), (int(eye_x), int(head_y - 2)), 2)
-                pygame.draw.circle(surface, (200, 50, 0), (int(eye_x), int(head_y - 2)), 1)
-                # 尾羽
-                pygame.draw.line(surface, (100, 70, 30), (int(body_cx - 10), int(body_cy)),
-                               (int(body_cx - 20 * dir_sign), int(body_cy + 2)), 3)
-                # 羽毛拖尾
-                for i in range(4):
-                    trail_x = body_cx - 15 * dir_sign * (i + 1)
-                    trail_y = body_cy + (i % 3 - 1) * 6
-                    ts = pygame.Surface((6, 6), pygame.SRCALPHA)
-                    pygame.draw.ellipse(ts, (80, 160, 60, 120 - i * 25), (0, 0, 6, 6))
-                    surface.blit(ts, (int(trail_x - 3), int(trail_y - 3)))
+    def _draw_proj_eagle(self, surface, screen_x, screen_y, dir_sign):
+        """投射物：白头海雕"""
+        flap = math.sin(pygame.time.get_ticks() * 0.02) * 8
+        body_cx, body_cy = screen_x, screen_y
+        pygame.draw.ellipse(surface, (139, 90, 43), (int(body_cx - 10), int(body_cy - 6), 20, 12))
+        wing_color = (120, 80, 35)
+        wx1, wy1 = body_cx - 5, body_cy - 2
+        wtip1_x, wtip1_y = body_cx - 25 - int(flap), body_cy - 15 + int(abs(flap) * 0.5)
+        pygame.draw.line(surface, wing_color, (int(wx1), int(wy1)), (int(wtip1_x), int(wtip1_y)), 3)
+        pygame.draw.line(surface, wing_color, (int(wx1), int(wy1 + 2)), (int(wtip1_x), int(wtip1_y + 8)), 3)
+        wtip2_x, wtip2_y = body_cx + 25 + int(flap), body_cy - 15 + int(abs(flap) * 0.5)
+        pygame.draw.line(surface, wing_color, (int(body_cx + 5), int(wy1)), (int(wtip2_x), int(wtip2_y)), 3)
+        pygame.draw.line(surface, wing_color, (int(body_cx + 5), int(wy1 + 2)), (int(wtip2_x), int(wtip2_y + 8)), 3)
+        head_x, head_y = body_cx + 10 * dir_sign, body_cy - 4
+        pygame.draw.ellipse(surface, (139, 90, 43), (int(head_x - 5), int(head_y - 5), 10, 10))
+        pygame.draw.polygon(surface, (255, 200, 0), [
+            (int(head_x + 5 * dir_sign), int(head_y - 2)),
+            (int(head_x + 12 * dir_sign), int(head_y)),
+            (int(head_x + 5 * dir_sign), int(head_y + 2))
+        ])
+        pygame.draw.circle(surface, (0, 0, 0), (int(head_x + 3 * dir_sign), int(head_y - 2)), 2)
+        pygame.draw.circle(surface, (200, 50, 0), (int(head_x + 3 * dir_sign), int(head_y - 2)), 1)
+        pygame.draw.line(surface, (100, 70, 30), (int(body_cx - 10), int(body_cy)),
+                       (int(body_cx - 20 * dir_sign), int(body_cy + 2)), 3)
+        for i in range(4):
+            tx = body_cx - 15 * dir_sign * (i + 1)
+            ty = body_cy + (i % 3 - 1) * 6
+            ts = pygame.Surface((6, 6), pygame.SRCALPHA)
+            pygame.draw.ellipse(ts, (80, 160, 60, 120 - i * 25), (0, 0, 6, 6))
+            surface.blit(ts, (int(tx - 3), int(ty - 3)))
+
+    def _draw_proj_nunchaku(self, surface, screen_x, screen_y, dir_sign):
+        """投射物：双截棍（旋转）"""
+        t = pygame.time.get_ticks()
+        for i in range(2):
+            angle = t * 0.015 + i * math.pi
+            ex = screen_x + int(math.cos(angle) * 18) * dir_sign
+            ey = screen_y + int(math.sin(angle) * 12)
+            pygame.draw.ellipse(surface, (220, 170, 100), (int(ex - 5), int(ey - 3), 10, 6))
+            if i == 0:
+                sx, sy = screen_x, screen_y
+            else:
+                prev_angle = angle - 0.4
+                sx = screen_x + int(math.cos(prev_angle) * 18) * dir_sign
+                sy = screen_y + int(math.sin(prev_angle) * 12)
+            pygame.draw.line(surface, (180, 140, 80), (int(sx), int(sy)), (int(ex), int(ey)), 4)
+
+    def _draw_proj_shuriken(self, surface, screen_x, screen_y, dir_sign):
+        """投射物：手里剑（旋转飞镖）"""
+        rot = pygame.time.get_ticks() * 0.012
+        r = 14
+        cx, cy = int(screen_x), int(screen_y)
+        pts = [(cx, cy - r), (cx + 4, cy - 4), (cx + r, cy),
+               (cx + 4, cy + 4), (cx, cy + r), (cx - 4, cy + 4),
+               (cx - r, cy), (cx - 4, cy - 4)]
+        pygame.draw.polygon(surface, (180, 180, 190), pts)
+        pygame.draw.circle(surface, (80, 80, 90), (cx, cy), 4)
+        for i in range(3):
+            trail_x = cx - 12 * dir_sign * (i + 1)
+            trail_y = cy + (i % 3 - 1) * 5
+            ts = pygame.Surface((6, 6), pygame.SRCALPHA)
+            pygame.draw.circle(ts, (180, 180, 200, 150 - i * 40), (3, 3), 2)
+            surface.blit(ts, (int(trail_x - 3), int(trail_y - 3)))
+
+    def _draw_proj_default(self, surface, screen_x, screen_y, dir_sign):
+        """投射物：默认能量弹"""
+        colors = [(255, 255, 100), (255, 200, 50), (255, 150, 0)]
+        t = pygame.time.get_ticks()
+        ci = (t // 50) % len(colors)
+        pygame.draw.ellipse(surface, colors[ci], (int(screen_x - 30), int(screen_y - 20), 60, 40))
+        pygame.draw.ellipse(surface, (255, 255, 255), (int(screen_x - 18), int(screen_y - 12), 36, 24))
 
     def reset(self, x: float, y: float):
         """重置角色状态"""

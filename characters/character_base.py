@@ -1,7 +1,7 @@
 # 角色数据基类
 
 from dataclasses import dataclass
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 import pygame
 
 
@@ -11,6 +11,7 @@ class CharacterStats:
     name: str
     name_cn: str  # 中文名
     description: str  # 角色描述
+    weapon_type: str = "fist"  # 武器类型: fist, flag, laser, dagger, eagle, pistol, rifle, nunchaku, shuriken
     max_health: int = 1000  # 最大生命值
     walk_speed: float = 5.0  # 移动速度
     jump_force: float = 15.0  # 跳跃力度
@@ -80,6 +81,7 @@ class CharacterData:
             name="GongDaGe",
             name_cn="龚大哥",
             description="力量型角色，血量深厚但速度慢，技能围绕「爱国」展开",
+            weapon_type="flag",
             max_health=1500,
             walk_speed=2.5,
             jump_force=10.0,
@@ -97,6 +99,7 @@ class CharacterData:
             name="JunShi",
             name_cn="军师",
             description="远程型角色，擅长波动攻击，技能围绕「实验室」展开",
+            weapon_type="laser",
             max_health=900,
             walk_speed=5.0,
             jump_force=14.0,
@@ -114,6 +117,7 @@ class CharacterData:
             name="ShenMiRen",
             name_cn="神秘人",
             description="技巧型角色，被动随机闪避攻击，技能围绕「叛国」展开",
+            weapon_type="dagger",
             max_health=1000,
             walk_speed=6.0,
             jump_force=16.0,
@@ -132,6 +136,7 @@ class CharacterData:
             name="ZiTong",
             name_cn="籽桐",
             description="控制型角色，擅长负面增益和减速控制，技能围绕「雕」展开",
+            weapon_type="eagle",
             max_health=950,
             walk_speed=5.5,
             jump_force=15.0,
