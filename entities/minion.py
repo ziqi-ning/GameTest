@@ -10,6 +10,8 @@ from config import GROUND_Y, GRAVITY
 MINION_DIR = os.path.join("assets", "sprites", "minions")
 SPRITE_W = 96   # 每帧宽度（与角色一致）
 SPRITE_H = 63   # 每帧高度
+MINION_DRAW_W = 64  # 小兵渲染宽度（缩小以区分主角）
+MINION_DRAW_H = 42  # 小兵渲染高度
 
 
 def _load_spritesheet(filename: str, frame_count: int) -> List[pygame.Surface]:
@@ -82,6 +84,11 @@ class Minion:
         # 投射物列表（远程小兵用）
         self.projectiles: List['MinionProjectile'] = []
 
+        # 分散偏移：每个小兵有独立的目标偏移，避免扎堆
+        self.spread_offset = random.uniform(-80, 80)
+        # 行为延迟：随机错开决策时机
+        self.behavior_timer = random.uniform(0, 0.5)
+
     # ── 状态更新 ──────────────────────────────────────────────────────────────
 
     def update(self, dt: float, owner_x: float, owner_y: float,
@@ -117,33 +124,54 @@ class Minion:
         self._apply_physics(dt)
 
     def _behavior_charge(self, dt: float, enemy, enemy_minions: List['Minion']):
-        """冲锋：优先攻击敌方小兵，再攻击主角"""
+        """冲锋：优先攻击敌方小兵，再攻击主角，保持分散"""
+        # 行为延迟：错开决策时机，避免同步扎堆
+        self.behavior_timer = max(0.0, self.behavior_timer - dt)
+        if self.behavior_timer > 0:
+            self.vel_x = 0
+            self.current_anim = "idle"
+            return
+
         target = self._find_nearest_target(enemy, enemy_minions)
         if target is None:
             return
 
         tx = target.x if hasattr(target, 'x') else target[0]
         ty = target.y if hasattr(target, 'y') else target[1]
-        dist_x = abs(self.x - tx)
-        dist_y = self.y - ty  # 正值=目标在上方
+
+        # 应用分散偏移：每个小兵的目标位置略有不同
+        target_x = tx + self.spread_offset
+        dist_x = abs(self.x - target_x)
+        dist_y = self.y - ty
 
         self.facing_right = tx > self.x
 
+        # 与同阵营小兵保持间距（避免重叠）
+        same_side = [m for m in enemy_minions if m is not self and m.alive and m.owner_id == self.owner_id]
+        for ally in same_side:
+            ally_dist = abs(self.x - ally.x)
+            if ally_dist < 40:
+                # 太近了，往反方向推一点
+                push = 1 if self.x > ally.x else -1
+                self.vel_x = self.MOVE_SPEED * push
+                self.current_anim = "walk"
+                return
+
         # 目标在高处（超过40px），尝试跳跃
         if dist_y > 40 and self.on_ground and self.vel_y == 0:
-            self.vel_y = -12.0  # 跳跃
+            self.vel_y = -12.0
             self.on_ground = False
 
         if dist_x > self.ATTACK_RANGE or abs(dist_y) > 80:
-            # 水平靠近，且高度差不超过80px才算在攻击范围
-            self.vel_x = self.MOVE_SPEED * (1 if tx > self.x else -1)
+            self.vel_x = self.MOVE_SPEED * (1 if target_x > self.x else -1)
             self.current_anim = "walk"
         else:
             self.vel_x = 0
-            # 攻击（需要高度差在合理范围内）
             if self.attack_timer <= 0 and abs(dist_y) <= 80:
                 self._do_attack(target)
                 self.attack_timer = self.ATTACK_COOLDOWN
+                # 攻击后随机重置偏移，下次攻击位置不同
+                self.spread_offset = random.uniform(-80, 80)
                 self.current_anim = "attack"
                 self.anim_frame = 0
             elif self.current_anim == "attack":
@@ -237,14 +265,16 @@ class Minion:
         self._draw_health_bar(surface)
 
     def _draw_body(self, surface: pygame.Surface):
-        """绘制小兵本体（使用 spritesheet 或占位）"""
+        """绘制小兵本体（使用 spritesheet 或占位，缩小渲染）"""
         frames = self.sprites.get(self.current_anim) or self.sprites.get("idle") or []
         if frames:
             idx = self.anim_frame % len(frames)
             frame = frames[idx]
             if not self.facing_right:
                 frame = pygame.transform.flip(frame, True, False)
-            surface.blit(frame, (int(self.x - SPRITE_W // 2), int(self.y - SPRITE_H)))
+            # 缩小渲染，区分主角
+            small = pygame.transform.scale(frame, (MINION_DRAW_W, MINION_DRAW_H))
+            surface.blit(small, (int(self.x - MINION_DRAW_W // 2), int(self.y - MINION_DRAW_H)))
         else:
             # 占位方块
             w, h = self.SIZE
@@ -326,7 +356,7 @@ class MinionProjectile:
 class GongMinion(Minion):
     """戴红头巾的小子，攻速快，近战"""
     SIZE = (28, 44)
-    MAX_HEALTH = 150
+    MAX_HEALTH = 750
     MOVE_SPEED = 3.2
     ATTACK_RANGE = 55
     ATTACK_DAMAGE = 12
@@ -347,7 +377,7 @@ class GongMinion(Minion):
 class JunshiMinion(Minion):
     """穿白大褂的研究员，远程丢试剂瓶"""
     SIZE = (28, 46)
-    MAX_HEALTH = 130
+    MAX_HEALTH = 650
     MOVE_SPEED = 2.0
     ATTACK_RANGE = 250
     ATTACK_DAMAGE = 18
@@ -407,7 +437,7 @@ class JunshiMinion(Minion):
 class ShenmirenMinion(Minion):
     """日本武士，伤害高，近战"""
     SIZE = (30, 50)
-    MAX_HEALTH = 160
+    MAX_HEALTH = 800
     MOVE_SPEED = 2.8
     ATTACK_RANGE = 65
     ATTACK_DAMAGE = 28      # 高伤害
@@ -434,7 +464,7 @@ class ShenmirenMinion(Minion):
 class ZitongMinion(Minion):
     """飞行的雕，可飞行，啄击+下蛋攻击"""
     SIZE = (36, 28)
-    MAX_HEALTH = 120
+    MAX_HEALTH = 600
     MOVE_SPEED = 3.5
     ATTACK_RANGE = 70
     ATTACK_DAMAGE = 14

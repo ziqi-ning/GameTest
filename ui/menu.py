@@ -12,7 +12,7 @@ class Menu:
         self.screen_height = screen_height
 
         self.selected_index = 0
-        self.menu_items = ["开始游戏", "双人模式", "退出"]
+        self.menu_items = ["普通模式", "双人模式", "调试模式", "退出"]
         self.item_height = 60
 
         self.title_font = None

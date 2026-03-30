@@ -30,10 +30,10 @@ class Animator:
             AnimationState.JUMP: 4,
             AnimationState.FALL: 4,
             AnimationState.CROUCH: 1,
-            AnimationState.ATTACK_LIGHT: 3,   # jab.png 只有3帧
-            AnimationState.ATTACK_HEAVY: 5,    # kick.png 有5帧
-            AnimationState.ATTACK_SPECIAL: 5,  # 暂用kick
-            AnimationState.HIT: 2,             # hurt.png 只有2帧
+            AnimationState.ATTACK_LIGHT: 3,
+            AnimationState.ATTACK_HEAVY: 5,
+            AnimationState.ATTACK_SPECIAL: 5,
+            AnimationState.HIT: 2,
             AnimationState.BLOCK: 2,
             AnimationState.KO: 2,
             AnimationState.LAND: 4,

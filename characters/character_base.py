@@ -76,66 +76,66 @@ class CharacterData:
 
     @staticmethod
     def create_gong_dage() -> CharacterStats:
-        """龚大哥 - 力量型，血量厚，速度慢，主题：爱国"""
+        """龚大哥 - 力量型拳击手，拳套，血量厚速度慢"""
         return CharacterStats(
             name="GongDaGe",
             name_cn="龚大哥",
-            description="力量型角色，血量深厚但速度慢，技能围绕「爱国」展开",
-            weapon_type="flag",
+            description="力量型拳击手，血量深厚但速度慢，技能围绕「爱国」展开",
+            weapon_type="fist",
             max_health=1500,
             walk_speed=2.5,
             jump_force=13.0,  # 力量型角色，能跳上第一阶平台（约169px高度）
             attack_power=120,
             defense=0.25,
             special_cost=80,
-            color=(220, 50, 50),
-            secondary_color=(180, 30, 30)
+            color=(220, 50, 50),        # 红色主题 - Boxer CC0 拳击手
+            secondary_color=(255, 100, 100)
         )
 
     @staticmethod
     def create_junshi() -> CharacterStats:
-        """军师 - 远程型，伤害爆炸，主题：实验室"""
+        """军师 - 远程型研究员，手枪攻击，波动伤害"""
         return CharacterStats(
             name="JunShi",
             name_cn="军师",
-            description="远程型角色，擅长波动攻击，技能围绕「实验室」展开",
-            weapon_type="laser",
+            description="远程型研究员，擅长手枪射击和波动攻击，技能围绕「实验室」展开",
+            weapon_type="pistol",
             max_health=900,
             walk_speed=5.0,
             jump_force=14.0,
             attack_power=100,
             defense=0.10,
             special_cost=80,
-            color=(100, 50, 220),
-            secondary_color=(70, 30, 180)
+            color=(150, 100, 60),       # 棕色主题 - LPC Professor 研究员
+            secondary_color=(200, 150, 120)
         )
 
     @staticmethod
     def create_shenmiren() -> CharacterStats:
-        """神秘人 - 被动闪避，技能围绕「叛国」"""
+        """神秘人 - 技巧型忍者，手里剑，被动25%闪避"""
         return CharacterStats(
             name="ShenMiRen",
             name_cn="神秘人",
-            description="技巧型角色，被动随机闪避攻击，技能围绕「叛国」展开",
-            weapon_type="dagger",
+            description="技巧型忍者，擅长手里剑攻击，被动25%几率闪避所有伤害",
+            weapon_type="shuriken",
             max_health=1000,
             walk_speed=6.0,
             jump_force=16.0,
             attack_power=85,
             defense=0.12,
             special_cost=80,
-            color=(50, 50, 50),
-            secondary_color=(100, 100, 100),
+            color=(80, 40, 120),         # 暗紫色 - LPC 忍者
+            secondary_color=(255, 150, 100),
             dodge_chance=0.25  # 25% 闪避几率
         )
 
     @staticmethod
     def create_zitong() -> CharacterStats:
-        """籽桐 - 负面增益，减速控制，主题：雕"""
+        """籽桐 - 控制型探险家，白头海雕，减速控制"""
         return CharacterStats(
             name="ZiTong",
             name_cn="籽桐",
-            description="控制型角色，擅长负面增益和减速控制，技能围绕「雕」展开",
+            description="控制型探险家，擅长白头海雕攻击和减速控制，技能围绕「雕」展开",
             weapon_type="eagle",
             max_health=950,
             walk_speed=5.5,
@@ -143,8 +143,8 @@ class CharacterData:
             attack_power=75,
             defense=0.15,
             special_cost=80,
-            color=(80, 180, 80),
-            secondary_color=(50, 140, 50)
+            color=(50, 180, 80),         # 绿色 - Kenney Adventurer 探险家
+            secondary_color=(100, 220, 130)
         )
 
 

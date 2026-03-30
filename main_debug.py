@@ -252,6 +252,24 @@ class Game:
         self.p1_char_index = p1_char
         self.p2_char_index = p2_char
 
+        # 更新角色主题色到UI
+        p1_data = get_character(p1_char)
+        p2_data = get_character(p2_char)
+        self.fight_ui.p1_health.character_color = p1_data.stats.color
+        self.fight_ui.p1_health.secondary_color = p1_data.stats.secondary_color
+        self.fight_ui.p1_health.health_high = p1_data.stats.color
+        self.fight_ui.p1_health.health_med = p1_data.stats.secondary_color
+        self.fight_ui.p1_health.max_health = p1_data.stats.max_health
+        self.fight_ui.p1_skills.skill1_color = p1_data.stats.color
+        self.fight_ui.p1_skills.skill2_color = p1_data.stats.secondary_color
+        self.fight_ui.p2_health.character_color = p2_data.stats.color
+        self.fight_ui.p2_health.secondary_color = p2_data.stats.secondary_color
+        self.fight_ui.p2_health.health_high = p2_data.stats.color
+        self.fight_ui.p2_health.health_med = p2_data.stats.secondary_color
+        self.fight_ui.p2_health.max_health = p2_data.stats.max_health
+        self.fight_ui.p2_skills.skill1_color = p2_data.stats.color
+        self.fight_ui.p2_skills.skill2_color = p2_data.stats.secondary_color
+
         print(f"[DEBUG] Starting match: P1={p1_char}, P2={p2_char}, vsAI={self.is_vs_ai}")
         self.start_round()
 

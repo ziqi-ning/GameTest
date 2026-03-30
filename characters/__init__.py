@@ -38,8 +38,8 @@ register_character(3, create_player_d)  # 籽桐 - 控制型
 
 # 角色列表（用于UI显示）
 CHARACTER_LIST = [
-    {"id": 0, "name": "龚大哥", "type": "力量·爱国", "color": (220, 50, 50)},
-    {"id": 1, "name": "军师", "type": "远程·实验室", "color": (100, 50, 220)},
-    {"id": 2, "name": "神秘人", "type": "技巧·叛国", "color": (50, 50, 50)},
-    {"id": 3, "name": "籽桐", "type": "控制·雕", "color": (80, 180, 80)},
+    {"id": 0, "name": "龚大哥", "type": "爱国",   "color": (220, 50, 50)},
+    {"id": 1, "name": "军师",   "type": "高智商", "color": (150, 100, 60)},
+    {"id": 2, "name": "神秘人", "type": "叛国",   "color": (80, 40, 120)},
+    {"id": 3, "name": "籽桐",   "type": "蛋雕",   "color": (50, 180, 80)},
 ]

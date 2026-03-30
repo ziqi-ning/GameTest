@@ -156,10 +156,10 @@ class FightUI:
     """战斗界面UI管理"""
 
     def __init__(self, screen_width: int, screen_height: int,
-                 p1_color: Tuple[int, int, int] = (50, 200, 80),
-                 p1_secondary: Tuple[int, int, int] = (220, 180, 30),
-                 p2_color: Tuple[int, int, int] = (100, 50, 220),
-                 p2_secondary: Tuple[int, int, int] = (70, 30, 180)):
+                 p1_color: Tuple[int, int, int] = (220, 50, 50),
+                 p1_secondary: Tuple[int, int, int] = (255, 100, 100),
+                 p2_color: Tuple[int, int, int] = (50, 100, 220),
+                 p2_secondary: Tuple[int, int, int] = (100, 150, 255)):
         self.screen_width = screen_width
         self.screen_height = screen_height
 

@@ -23,7 +23,8 @@ MATCH_TIME = 99  # 秒
 # 重力（调低让跳跃更舒适，低力角色也能跳上中低平台）
 GRAVITY = 0.5
 
-# 颜色定义
+# 角色配色（统一风格，开源格斗游戏配色方案）
+# 精灵来源: Streets of Fight (p1红/BrawlerGirl, p2蓝/EnemyPunk) + LPC CC0 (p3紫, p4绿)
 class Colors:
     # UI 颜色
     WHITE = (255, 255, 255)
@@ -38,20 +39,24 @@ class Colors:
     DARK_GRAY = (50, 50, 50)
 
     # UI 背景
-    UI_BG = (30, 30, 40)
-    UI_BORDER = (80, 80, 100)
-    HEALTH_BG = (40, 40, 50)
+    UI_BG = (20, 20, 30)
+    UI_BORDER = (60, 60, 80)
+    HEALTH_BG = (30, 30, 40)
     HEALTH_LOW = (200, 30, 30)
     HEALTH_MED = (220, 180, 30)
     HEALTH_HIGH = (50, 200, 80)
-    SPECIAL_BG = (50, 50, 60)
-    SPECIAL_FILLED = (100, 200, 255)
+    SPECIAL_BG = (40, 40, 55)
+    SPECIAL_FILLED = (80, 180, 255)
 
-    # 角色配色
-    PLAYER_A_COLOR = (220, 50, 50)      # 红色 - 力量型
-    PLAYER_B_COLOR = (50, 180, 220)    # 蓝色 - 速度型
-    PLAYER_C_COLOR = (50, 200, 100)     # 绿色 - 均衡型
-    PLAYER_D_COLOR = (200, 100, 220)    # 紫色 - 技巧型
+    # 角色配色（与精灵主色调一致）
+    PLAYER_A_COLOR = (220, 50, 50)      # 红色 - 力量型 龚大哥 (Brawler Girl)
+    PLAYER_A_SECONDARY = (255, 100, 100)
+    PLAYER_B_COLOR = (50, 100, 220)    # 蓝色 - 速度型 军师 (Enemy Punk)
+    PLAYER_B_SECONDARY = (100, 150, 255)
+    PLAYER_C_COLOR = (50, 160, 80)     # 绿色 - 均衡型 籽桐
+    PLAYER_C_SECONDARY = (100, 220, 130)
+    PLAYER_D_COLOR = (80, 50, 180)     # 紫色 - 技巧型 神秘人
+    PLAYER_D_SECONDARY = (150, 100, 220)
 
 # 攻击判定颜色（调试用）
 HITBOX_COLOR = (255, 0, 0, 100)

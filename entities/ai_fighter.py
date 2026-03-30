@@ -9,9 +9,10 @@ from constants import FighterState, Direction
 from game.state_machine import AnimationState
 
 # 边界安全区域（距离边缘多少像素内视为危险）
-EDGE_DANGER_ZONE = 150
+EDGE_DANGER_ZONE = 200  # 扩大危险区，更早往中央走
 SCREEN_LEFT = 60
 SCREEN_RIGHT = 1220
+SCREEN_CENTER = (SCREEN_LEFT + SCREEN_RIGHT) / 2
 
 class AIFighter(Fighter):
     """AI控制的角色"""
@@ -37,7 +38,7 @@ class AIFighter(Fighter):
 
         # 主动出击计时器：防止AI一直被动
         self.passive_timer = 0.0
-        self.passive_threshold = 2.0  # 超过2秒没有进攻则强制出击
+        self.passive_threshold = 1.2  # 超过1.2秒没有进攻则强制出击
 
         # 记忆
         self.opponent_last_attack_time = 0
@@ -84,11 +85,12 @@ class AIFighter(Fighter):
         # 解除防御
         self.is_blocking = False
 
-        # 边缘逃脱优先级最高：靠近边缘时强制向中央移动
+        # 边缘逃脱：靠近边缘时向中央移动，同时不放弃攻击
         if self._is_near_edge():
             move = self._edge_escape_direction(opponent.x)
             self.apply_movement(*move)
-            if distance < 120 and self.attack_cooldown <= 0:
+            # 边缘时也要打，不能只跑
+            if distance < 150 and self.attack_cooldown <= 0:
                 self.attack_light()
             return
 
@@ -97,7 +99,6 @@ class AIFighter(Fighter):
         if nearest_minion is not None:
             minion_dist = abs(self.x - nearest_minion.x)
             if minion_dist < 100:
-                # 转向小兵并攻击
                 self.update_direction(nearest_minion.x)
                 if minion_dist > 80:
                     self.ai_approach(minion_dist, nearest_minion)
@@ -114,15 +115,41 @@ class AIFighter(Fighter):
             return
 
         # AI行为决策
-        if distance > 200:
-            self.ai_approach(distance, opponent)
+        if distance > 300:
+            # 对手太远，全速追击，同时考虑远程攻击
+            if self._can_use_ranged() and distance < 500 and random.random() < 0.4:
+                self.attack_heavy()
+                self.passive_timer = 0.0
+            else:
+                self.ai_approach(distance, opponent)
+                # 追击时考虑跳上平台
+                self._try_platform_jump(opponent)
+        elif distance > 200:
+            # 中远距离：优先远程攻击，其次追击
+            if self._can_use_ranged() and random.random() < 0.6:
+                self.attack_heavy()
+                self.passive_timer = 0.0
+            elif random.random() < 0.85:
+                self.ai_approach(distance, opponent)
+                self._try_platform_jump(opponent)
+                self.passive_timer = 0.0
+            else:
+                if self.on_ground:
+                    self._do_jump()
         elif distance > 80:
-            # 中距离：大概率进攻
-            if random.random() < min(self.aggression + 0.2, 0.85):
+            # 中距离：大概率进攻，偶尔远程
+            if self._can_use_ranged() and random.random() < 0.25:
+                self.attack_heavy()
+                self.passive_timer = 0.0
+            elif random.random() < min(self.aggression + 0.2, 0.9):
                 self.ai_attack(distance, opponent)
                 self.passive_timer = 0.0
             else:
-                self._safe_retreat(distance, opponent)
+                retreat_x = self.x - 50 if opponent.x > self.x else self.x + 50
+                if retreat_x < SCREEN_LEFT + EDGE_DANGER_ZONE or retreat_x > SCREEN_RIGHT - EDGE_DANGER_ZONE:
+                    self.ai_attack(distance, opponent)
+                else:
+                    self._safe_retreat(distance, opponent)
         else:
             # 近距离：直接打
             self.ai_combat(distance, opponent)
@@ -225,6 +252,30 @@ class AIFighter(Fighter):
             self._safe_retreat(distance, opponent)
         elif distance > 120:
             self.ai_approach(distance, opponent)
+
+    def _can_use_ranged(self) -> bool:
+        """判断是否可以使用远程攻击"""
+        if self.attack_cooldown > 0 or self.is_attacking or self.hitstun_timer > 0:
+            return False
+        if not self.char_data.moves or len(self.char_data.moves) < 2:
+            return False
+        move = self.char_data.moves[1]
+        if not getattr(move, 'is_ranged', False):
+            return False
+        mana_cost = getattr(move, 'mana_cost', 0)
+        return self.special_energy >= mana_cost
+
+    def _try_platform_jump(self, opponent: Fighter):
+        """尝试跳上平台追击对手"""
+        if not self.on_ground:
+            return
+        height_diff = self.y - opponent.y  # 正值=对手在上方
+        # 对手在高处超过80px，主动跳上去
+        if height_diff > 80 and random.random() < 0.06:
+            self._do_jump()
+        # 对手在低处，考虑跳下去（跳跃后自然落下）
+        elif height_diff < -100 and random.random() < 0.03:
+            self._do_jump()
 
     def update(self, dt: float, opponent: Fighter = None):
         """更新AI角色"""

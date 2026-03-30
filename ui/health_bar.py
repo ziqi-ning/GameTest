@@ -1,11 +1,18 @@
-# 血条UI组件
+# -*- coding: utf-8 -*-
+# 血条UI组件 - 格斗游戏风格
+# 统一配色方案，角色主题色驱动，格斗游戏像素风边框
+#
+# 精灵来源: Streets of Fight (Luis Zuno @ansimuz)
+# 许可证: Free for any use, credit appreciated
 
 import math
 import pygame
 from typing import Tuple
+from config import Colors
+
 
 class HealthBar:
-    """血条组件"""
+    """血条组件 - 格斗游戏风格，双层边框 + 角色主题色渐变"""
 
     def __init__(self, x: int, y: int, width: int, height: int,
                  is_player1: bool = True,
@@ -28,17 +35,18 @@ class HealthBar:
         self.max_shield = 300
         self.display_shield = 0
 
-        # 角色颜色（用于渐变效果）
+        # 角色主题色
         self.character_color = character_color
         self.secondary_color = secondary_color
+        self.health_high = character_color
+        self.health_med = secondary_color
+        self.health_low = Colors.HEALTH_LOW
 
-        # 颜色
-        self.bg_color = (40, 40, 50)
-        self.health_high = character_color  # 使用角色主色
-        self.health_med = secondary_color   # 使用角色次色
-        self.health_low = (200, 30, 30)
-        self.shield_color = (100, 200, 255)  # 护盾颜色
-        self.border_color = (80, 80, 100)
+        # 像素边框
+        self.bg_color = Colors.HEALTH_BG
+        self.shield_color = (100, 200, 255)
+        self.border_dark = (20, 20, 30)
+        self.border_light = Colors.UI_BORDER
 
         # 字体
         self.font = None
@@ -56,17 +64,14 @@ class HealthBar:
         self.font = pygame.font.Font(None, 24)
 
     def set_health(self, health: int):
-        """设置血量"""
         self.current_health = max(0, min(health, self.max_health))
 
     def set_shield(self, shield: int, max_shield: int = 300):
-        """设置护盾值"""
         self.current_shield = max(0, shield)
         self.max_shield = max(1, max_shield)
 
     def update(self, dt: float):
-        """更新血条显示（平滑过渡）"""
-        # 血量平滑
+        """平滑过渡"""
         if self.display_health > self.current_health:
             self.display_health -= self.smooth_speed * dt * 100
             if self.display_health < self.current_health:
@@ -76,7 +81,6 @@ class HealthBar:
             if self.display_health > self.current_health:
                 self.display_health = self.current_health
 
-        # 护盾平滑
         if self.display_shield > self.current_shield:
             self.display_shield -= self.smooth_speed * dt * 150
             if self.display_shield < self.current_shield:
@@ -87,7 +91,6 @@ class HealthBar:
                 self.display_shield = self.current_shield
 
     def get_health_color(self) -> Tuple[int, int, int]:
-        """根据血量获取颜色"""
         ratio = self.display_health / self.max_health
         if ratio > 0.5:
             return self.health_high
@@ -97,12 +100,19 @@ class HealthBar:
             return self.health_low
 
     def draw(self, surface: pygame.Surface):
-        """绘制血条和护盾"""
-        # 背景
-        pygame.draw.rect(surface, self.bg_color,
-                        (self.x, self.y, self.width, self.height))
+        """绘制血条 - 格斗游戏风格"""
+        # ── 双层外边框（像素深色）───────────────────────────────────
+        outer_pad = 2
+        pygame.draw.rect(surface, self.border_dark,
+                       (self.x - outer_pad, self.y - outer_pad,
+                        self.width + outer_pad * 2, self.height + outer_pad * 2),
+                       border_radius=3)
 
-        # ── 护盾条（在血条上方，护盾值>0时显示）─────────────────
+        # ── 血条背景 ───────────────────────────────────────────────
+        pygame.draw.rect(surface, self.bg_color,
+                       (self.x, self.y, self.width, self.height))
+
+        # ── 护盾条（血条上方）───────────────────────────────────────
         if self.display_shield > 0:
             shield_height = max(4, self.height // 5)
             shield_y = self.y - shield_height - 2
@@ -113,42 +123,38 @@ class HealthBar:
                 if self.is_player1:
                     pygame.draw.rect(surface, self.shield_color,
                                   (self.x, shield_y, shield_width, shield_height))
-                    # 护盾高光
+                    # 高光
                     pygame.draw.rect(surface, (150, 220, 255),
                                   (self.x, shield_y, shield_width, 2))
                 else:
                     pygame.draw.rect(surface, self.shield_color,
                                   (self.x + self.width - shield_width, shield_y,
                                    shield_width, shield_height))
-                    # 护盾高光
                     pygame.draw.rect(surface, (150, 220, 255),
                                   (self.x + self.width - shield_width, shield_y,
                                    shield_width, 2))
 
-                # 护盾边框
                 pygame.draw.rect(surface, (80, 160, 200),
                               (self.x, shield_y, self.width, shield_height), 1)
 
-        # ── 血量条 ────────────────────────────────────────────────
+        # ── 血量条 + 渐变效果 ───────────────────────────────────────
         health_ratio = self.display_health / self.max_health
         health_width = int(self.width * health_ratio)
+        health_color = self.get_health_color()
 
         if health_width > 0:
-            # 根据血量选择颜色
-            health_color = self.get_health_color()
-
+            # 主血量
             if self.is_player1:
                 pygame.draw.rect(surface, health_color,
                                (self.x, self.y, health_width, self.height))
             else:
-                # P2血条从右向左
                 pygame.draw.rect(surface, health_color,
                                (self.x + self.width - health_width, self.y,
                                 health_width, self.height))
 
-            # 高光效果
+            # 顶部高光条（角色主题色）
             highlight_height = max(2, self.height // 4)
-            highlight_color = tuple(min(255, c + 40) for c in health_color)
+            highlight_color = tuple(min(255, c + 50) for c in health_color)
             if self.is_player1:
                 pygame.draw.rect(surface, highlight_color,
                                (self.x, self.y, health_width, highlight_height))
@@ -157,26 +163,52 @@ class HealthBar:
                                (self.x + self.width - health_width, self.y,
                                 health_width, highlight_height))
 
-        # 边框
-        pygame.draw.rect(surface, self.border_color,
-                        (self.x, self.y, self.width, self.height), 2)
+            # 低血量脉冲警告效果
+            if health_ratio <= 0.25 and health_ratio > 0:
+                pulse = abs(math.sin(pygame.time.get_ticks() * 0.008)) * 0.4
+                flash_color = tuple(
+                    min(255, int(c + (255 - c) * pulse))
+                    for c in self.health_low
+                )
+                flash_surf = pygame.Surface((health_width, self.height), pygame.SRCALPHA)
+                flash_surf.fill((flash_color[0], flash_color[1], flash_color[2],
+                                int(80 * pulse)))
+                if self.is_player1:
+                    surface.blit(flash_surf, (self.x, self.y))
+                else:
+                    surface.blit(flash_surf, (self.x + self.width - health_width, self.y))
+
+        # ── 像素边框（格斗游戏风格）────────────────────────────────
+        pygame.draw.rect(surface, self.border_light,
+                        (self.x, self.y, self.width, self.height), 2, border_radius=2)
+        # 内阴影
+        inner_color = tuple(max(0, c - 15) for c in self.border_light)
+        pygame.draw.rect(surface, inner_color,
+                        (self.x + 1, self.y + 1, self.width - 2, self.height - 2), 1)
 
     def draw_name(self, surface: pygame.Surface, name: str, font: pygame.font.Font = None):
         """绘制角色名"""
         if font is None:
             font = self.font
         if self.is_player1:
+            # 角色名 + 描边效果
+            shadow = font.render(name, True, self.border_dark)
             text = font.render(name, True, (255, 255, 255))
+            surface.blit(shadow, (self.x + 1, self.y - 24))
+            surface.blit(shadow, (self.x - 1, self.y - 24))
             surface.blit(text, (self.x, self.y - 25))
         else:
+            shadow = font.render(name, True, self.border_dark)
             text = font.render(name, True, (255, 255, 255))
             text_rect = text.get_rect()
             text_rect.right = self.x + self.width
+            surface.blit(shadow, (text_rect.right - text.get_width() + 1, self.y - 24))
+            surface.blit(shadow, (text_rect.right - text.get_width() - 1, self.y - 24))
             surface.blit(text, (text_rect.right - text.get_width(), self.y - 25))
 
 
 class SpecialBar:
-    """必杀技能量槽"""
+    """能量槽 - 格斗游戏风格"""
 
     def __init__(self, x: int, y: int, width: int, height: int,
                  is_player1: bool = True):
@@ -189,33 +221,36 @@ class SpecialBar:
         self.current_energy = 0
         self.max_energy = 100
 
-        self.bg_color = (50, 50, 60)
-        self.energy_color = (100, 200, 255)
-        self.energy_ready_color = (255, 220, 50)
-        self.border_color = (80, 80, 100)
+        self.bg_color = Colors.SPECIAL_BG
+        self.energy_color = Colors.SPECIAL_FILLED
+        self.energy_ready_color = Colors.YELLOW
+        self.border_color = Colors.UI_BORDER
 
     def set_energy(self, energy: int):
-        """设置能量"""
         self.current_energy = max(0, min(energy, self.max_energy))
 
     def update(self, dt: float):
-        """更新能量槽"""
         pass
 
     def draw(self, surface: pygame.Surface):
-        """绘制能量槽"""
+        """绘制能量槽 - 像素边框风格"""
+        # 外边框
+        pygame.draw.rect(surface, Colors.DARK_GRAY,
+                       (self.x - 1, self.y - 1, self.width + 2, self.height + 2),
+                       border_radius=2)
         # 背景
         pygame.draw.rect(surface, self.bg_color,
-                        (self.x, self.y, self.width, self.height))
+                       (self.x, self.y, self.width, self.height))
 
-        # 能量条
         energy_ratio = self.current_energy / self.max_energy
         energy_width = int(self.width * energy_ratio)
 
         if energy_width > 0:
-            # 判断是否满能量（可以使用必杀技）
             if energy_ratio >= 1.0:
-                energy_color = self.energy_ready_color
+                # 满能量时脉动金色
+                pulse = abs(math.sin(pygame.time.get_ticks() * 0.006))
+                c = self.energy_ready_color
+                energy_color = tuple(min(255, int(c[i] + (255 - c[i]) * pulse * 0.4)) for i in range(3))
             else:
                 energy_color = self.energy_color
 
@@ -227,13 +262,12 @@ class SpecialBar:
                                (self.x + self.width - energy_width, self.y,
                                 energy_width, self.height))
 
-        # 边框
         pygame.draw.rect(surface, self.border_color,
-                        (self.x, self.y, self.width, self.height), 1)
+                        (self.x, self.y, self.width, self.height), 1, border_radius=1)
 
 
 class ComboDisplay:
-    """连击显示"""
+    """连击显示 - 格斗游戏风格"""
 
     def __init__(self):
         self.combo_count = 0
@@ -242,7 +276,6 @@ class ComboDisplay:
         self._init_font()
 
     def _init_font(self):
-        """初始化字体"""
         chinese_fonts = ["microsoftyahei", "simsun", "simhei", "sans-serif"]
         for font_name in chinese_fonts:
             try:
@@ -253,44 +286,40 @@ class ComboDisplay:
         self.font = pygame.font.Font(None, 36)
 
     def set_combo(self, count: int):
-        """设置连击数"""
         if count > self.combo_count:
             self.combo_count = count
-            self.timer = 2.0  # 显示2秒
+            self.timer = 2.0
 
     def update(self, dt: float):
-        """更新显示"""
         if self.timer > 0:
             self.timer -= dt
 
     def draw(self, surface: pygame.Surface, x: int, y: int):
-        """绘制连击数"""
         if self.timer <= 0 or self.combo_count <= 1:
             return
 
-        # 淡出效果
         alpha = int(255 * min(1.0, self.timer))
         if alpha <= 0:
             return
 
-        # 创建半透明表面
         combo_text = f"{self.combo_count} 连击!"
-        text = self.font.render(combo_text, True, (255, 220, 50))
+        # 连击数越大颜色越亮
+        intensity = min(1.0, 0.5 + self.combo_count * 0.05)
+        r = int(255 * intensity)
+        g = int(220 * intensity)
+        b = int(50 * intensity)
+        combo_color = (r, g, b)
+        text = self.font.render(combo_text, True, combo_color)
+        shadow = self.font.render(combo_text, True, (0, 0, 0))
 
-        # 添加阴影
-        shadow = self.font.render(combo_text, True, (100, 50, 0))
-
-        # 绘制阴影
         shadow.set_alpha(alpha)
-        surface.blit(shadow, (x + 2, y + 2))
-
-        # 绘制文字
         text.set_alpha(alpha)
+        surface.blit(shadow, (x + 2, y + 2))
         surface.blit(text, (x, y))
 
 
 class SkillBar:
-    """双技能槽UI - 华丽版"""
+    """双技能槽UI - 格斗游戏华丽版"""
 
     def __init__(self, x: int, y: int, is_player1: bool = True,
                  skill1_color: Tuple[int, int, int] = (255, 100, 100),
@@ -301,33 +330,27 @@ class SkillBar:
         self.skill1_color = skill1_color
         self.skill2_color = skill2_color
 
-        # 技能槽尺寸
         self.slot_width = 50
         self.slot_height = 50
         self.slot_spacing = 8
 
-        # 能量
         self.skill1_energy = 0
         self.skill2_energy = 0
         self.max_energy = 100
 
-        # 动画
         self.slot1_glow = 0.0
         self.slot2_glow = 0.0
         self.pulse_time = 0.0
 
-        # 冷却/充能动画
         self.skill1_cooling = False
         self.skill2_cooling = False
         self.cooldown_timer = 0.0
 
     def set_energy(self, skill1: int, skill2: int):
-        """设置两个技能的能量"""
         self.skill1_energy = max(0, min(skill1, self.max_energy))
         self.skill2_energy = max(0, min(skill2, self.max_energy))
 
     def trigger_cooldown(self, skill_index: int, duration: float):
-        """触发技能冷却"""
         if skill_index == 0:
             self.skill1_cooling = True
             self.skill1_energy = 0
@@ -337,10 +360,8 @@ class SkillBar:
         self.cooldown_timer = duration
 
     def update(self, dt: float):
-        """更新动画"""
         self.pulse_time += dt
 
-        # 更新发光效果
         if self.skill1_energy >= self.max_energy:
             self.slot1_glow = 0.5 + 0.5 * abs(math.sin(self.pulse_time * 4))
         else:
@@ -351,7 +372,6 @@ class SkillBar:
         else:
             self.slot2_glow = 0.0
 
-        # 更新冷却
         if self.cooldown_timer > 0:
             self.cooldown_timer -= dt
             if self.cooldown_timer <= 0:
@@ -359,9 +379,6 @@ class SkillBar:
                 self.skill2_cooling = False
 
     def draw(self, surface: pygame.Surface, skill1_name: str = "必杀1", skill2_name: str = "必杀2"):
-        """绘制技能槽"""
-
-        # 计算位置
         if self.is_player1:
             x1 = self.x
             x2 = self.x + self.slot_width + self.slot_spacing
@@ -369,12 +386,10 @@ class SkillBar:
             x1 = self.x - self.slot_width - self.slot_spacing
             x2 = self.x
 
-        # 绘制技能1
         self._draw_skill_slot(surface, x1, self.y, self.slot_width, self.slot_height,
                              self.skill1_energy, self.skill1_color, self.slot1_glow,
                              skill1_name, "1", self.skill1_cooling, self.cooldown_timer)
 
-        # 绘制技能2
         self._draw_skill_slot(surface, x2, self.y, self.slot_width, self.slot_height,
                              self.skill2_energy, self.skill2_color, self.slot2_glow,
                              skill2_name, "2", self.skill2_cooling, self.cooldown_timer)
@@ -382,101 +397,93 @@ class SkillBar:
     def _draw_skill_slot(self, surface: pygame.Surface, x: int, y: int, w: int, h: int,
                         energy: int, base_color: Tuple[int, int, int], glow: float,
                         name: str, key: str, cooling: bool, cooldown_time: float):
-        """绘制单个技能槽"""
-
-        # 外发光效果
+        # ── 外发光 ─────────────────────────────────────────────────
         if glow > 0:
-            glow_radius = int(10 * glow)
-            glow_surface = pygame.Surface((w + glow_radius * 2, h + glow_radius * 2), pygame.SRCALPHA)
-            glow_color = (*base_color, int(100 * glow))
-            pygame.draw.rect(glow_surface, glow_color,
+            glow_radius = int(8 + 6 * glow)
+            glow_surf = pygame.Surface((w + glow_radius * 2, h + glow_radius * 2), pygame.SRCALPHA)
+            glow_color = (*base_color, int(80 * glow))
+            pygame.draw.rect(glow_surf, glow_color,
                             (glow_radius - 2, glow_radius - 2, w + 4, h + 4),
                             border_radius=8)
-            surface.blit(glow_surface, (x - glow_radius, y - glow_radius))
+            surface.blit(glow_surf, (x - glow_radius, y - glow_radius))
 
-        # 背景框
-        bg_color = (30, 30, 40) if not cooling else (50, 30, 30)
-        pygame.draw.rect(surface, bg_color, (x, y, w, h), border_radius=6)
+        # ── 背景框 ────────────────────────────────────────────────
+        bg_color = (25, 25, 35) if not cooling else (50, 30, 30)
+        pygame.draw.rect(surface, bg_color, (x, y, w, h), border_radius=5)
 
-        # 能量填充
+        # ── 能量填充（从下往上渐变）───────────────────────────────
         energy_ratio = energy / self.max_energy
         fill_height = int(h * energy_ratio)
-
         if fill_height > 0:
-            # 渐变色填充
             for i in range(fill_height):
                 ratio = i / h
-                r = int(base_color[0] * (1 - ratio * 0.3))
-                g = int(base_color[1] * (1 - ratio * 0.3))
-                b = int(base_color[2] * (1 - ratio * 0.3))
+                r = int(base_color[0] * (1 - ratio * 0.4))
+                g = int(base_color[1] * (1 - ratio * 0.4))
+                b = int(base_color[2] * (1 - ratio * 0.4))
                 pygame.draw.line(surface, (r, g, b), (x + 2, y + h - i - 1), (x + w - 2, y + h - i - 1))
 
-        # 冷却遮罩
+        # ── 冷却遮罩 ────────────────────────────────────────────
         if cooling and cooldown_time > 0:
-            cooldown_ratio = cooldown_time / 2.0  # 假设2秒冷却
-            cover_height = int(h * cooldown_ratio)
+            cover_height = int(h * (cooldown_time / 2.0))
             cover = pygame.Surface((w, cover_height), pygame.SRCALPHA)
             cover.fill((0, 0, 0, 180))
             surface.blit(cover, (x, y))
 
-        # 边框 - 就绪时发光
+        # ── 边框（格斗游戏像素风格）───────────────────────────────
         if energy >= self.max_energy and not cooling:
             border_color = base_color
-            # 闪烁效果
             pulse = abs(math.sin(self.pulse_time * 6))
             border_width = 2 + int(pulse * 2)
         else:
-            border_color = (80, 80, 100)
+            border_color = Colors.UI_BORDER
             border_width = 2
 
-        pygame.draw.rect(surface, border_color, (x, y, w, h), border_width, border_radius=6)
+        pygame.draw.rect(surface, border_color, (x, y, w, h), border_width, border_radius=5)
+        inner = tuple(max(0, c - 20) for c in border_color)
+        pygame.draw.rect(surface, inner, (x + 1, y + 1, w - 2, h - 2), 1)
 
-        # 技能图标区域
+        # ── 技能图标 ─────────────────────────────────────────────
         icon_size = 20
         icon_x = x + (w - icon_size) // 2
-        icon_y = y + 8
+        icon_y = y + 6
 
-        # 绘制简单图标形状
         if "爱国" in name or "护盾" in name:
-            # 盾牌形状
-            points = [(icon_x + icon_size//2, icon_y),
-                     (icon_x + icon_size - 2, icon_y + 4),
-                     (icon_x + icon_size - 2, icon_y + icon_size - 6),
-                     (icon_x + icon_size//2, icon_y + icon_size - 2),
-                     (icon_x + 2, icon_y + icon_size - 6),
-                     (icon_x + 2, icon_y + 4)]
-            pygame.draw.polygon(surface, base_color, points)
+            # 盾牌
+            pts = [(icon_x + icon_size//2, icon_y),
+                   (icon_x + icon_size - 2, icon_y + 4),
+                   (icon_x + icon_size - 2, icon_y + icon_size - 6),
+                   (icon_x + icon_size//2, icon_y + icon_size - 2),
+                   (icon_x + 2, icon_y + icon_size - 6),
+                   (icon_x + 2, icon_y + 4)]
+            pygame.draw.polygon(surface, base_color, pts)
         elif "实验室" in name:
-            # 魔法球形状
             pygame.draw.circle(surface, base_color, (icon_x + icon_size//2, icon_y + icon_size//2), icon_size//2 - 2)
             pygame.draw.circle(surface, (255, 255, 255), (icon_x + icon_size//2 - 3, icon_y + icon_size//2 - 3), 4)
         elif "叛国" in name:
-            # 匕首形状
-            pygame.draw.line(surface, base_color,
-                           (icon_x + 4, icon_y + icon_size - 4),
-                           (icon_x + icon_size - 4, icon_y + 4), 3)
+            pygame.draw.line(surface, base_color, (icon_x + 4, icon_y + icon_size - 4), (icon_x + icon_size - 4, icon_y + 4), 3)
             pygame.draw.circle(surface, base_color, (icon_x + icon_size - 4, icon_y + 4), 4)
-        elif "雕" in name:
-            # 羽毛形状
-            points = [(icon_x + icon_size//2, icon_y),
-                     (icon_x + icon_size - 4, icon_y + icon_size),
-                     (icon_x + icon_size//2, icon_y + icon_size - 6),
-                     (icon_x + 4, icon_y + icon_size)]
-            pygame.draw.polygon(surface, base_color, points)
+        elif "雕" in name or "鹰" in name:
+            pts = [(icon_x + icon_size//2, icon_y),
+                   (icon_x + icon_size - 4, icon_y + icon_size),
+                   (icon_x + icon_size//2, icon_y + icon_size - 6),
+                   (icon_x + 4, icon_y + icon_size)]
+            pygame.draw.polygon(surface, base_color, pts)
         else:
-            # 默认星星
             pygame.draw.circle(surface, base_color, (icon_x + icon_size//2, icon_y + icon_size//2), icon_size//2 - 2)
 
-        # 按键提示
-        font_size = 14
+        # ── 按键提示 ─────────────────────────────────────────────
+        font_size = 13
         font = pygame.font.SysFont("arial", font_size, bold=True)
         key_text = font.render(key, True, (255, 255, 255))
         key_rect = key_text.get_rect(center=(x + w - 10, y + h - 10))
         surface.blit(key_text, key_rect)
 
-        # 就绪状态 "RDY" 文字
+        # ── RDY 就绪提示 ──────────────────────────────────────────
         if energy >= self.max_energy and not cooling:
-            ready_font = pygame.font.SysFont("arial", 10, bold=True)
-            ready_text = ready_font.render("RDY", True, (255, 255, 0))
+            pulse = abs(math.sin(self.pulse_time * 5))
+            ready_alpha = int(200 + 55 * pulse)
+            ready_font = pygame.font.SysFont("arial", 9, bold=True)
+            ready_text = ready_font.render("RDY", True, (255, 220, 0))
+            ready_text.set_alpha(ready_alpha)
             ready_rect = ready_text.get_rect(center=(x + w//2, y + h - 8))
             surface.blit(ready_text, ready_rect)

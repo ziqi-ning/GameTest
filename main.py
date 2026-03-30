@@ -81,6 +81,7 @@ class Game:
 
         # 模式
         self.is_vs_ai = True
+        self.debug_mode = False
 
         # 上一帧按键状态（用于检测边缘触发）
         self.prev_keys = None
@@ -130,11 +131,17 @@ class Game:
             if self.state == GameState.MENU:
                 result = self.menu.handle_input(event)
                 if result:
-                    if result == "开始游戏":
+                    if result == "普通模式":
                         self.is_vs_ai = True
+                        self.debug_mode = False
                         self.state = GameState.CHARACTER_SELECT
                     elif result == "双人模式":
                         self.is_vs_ai = False
+                        self.debug_mode = False
+                        self.state = GameState.CHARACTER_SELECT
+                    elif result == "调试模式":
+                        self.is_vs_ai = True
+                        self.debug_mode = True
                         self.state = GameState.CHARACTER_SELECT
                     elif result == "退出":
                         self.running = False
@@ -191,6 +198,14 @@ class Game:
 
     def update_fight(self, dt: float):
         """更新战斗"""
+        # 调试模式：无限血、无限蓝、金币9999
+        if self.debug_mode and self.player1 and self.player2:
+            self.player1.health = self.player1.max_health
+            self.player2.health = self.player2.max_health
+            self.player1.special_energy = self.player1.max_special
+            self.player2.special_energy = self.player2.max_special
+            self.player1.minion_manager.coins = 9999.0
+            self.player2.minion_manager.coins = 9999.0
         # 如果终极特效正在播放，暂停游戏更新
         if self.ultimate_effect.is_playing():
             self.ultimate_effect.update(dt)
@@ -342,12 +357,18 @@ class Game:
         self.fight_ui.p1_health.health_high = p1_data.stats.color
         self.fight_ui.p1_health.health_med = p1_data.stats.secondary_color
         self.fight_ui.p1_health.max_health = p1_data.stats.max_health
+        # 同步技能槽颜色
+        self.fight_ui.p1_skills.skill1_color = p1_data.stats.color
+        self.fight_ui.p1_skills.skill2_color = p1_data.stats.secondary_color
 
         self.fight_ui.p2_health.character_color = p2_data.stats.color
         self.fight_ui.p2_health.secondary_color = p2_data.stats.secondary_color
         self.fight_ui.p2_health.health_high = p2_data.stats.color
         self.fight_ui.p2_health.health_med = p2_data.stats.secondary_color
         self.fight_ui.p2_health.max_health = p2_data.stats.max_health
+        # 同步技能槽颜色
+        self.fight_ui.p2_skills.skill1_color = p2_data.stats.color
+        self.fight_ui.p2_skills.skill2_color = p2_data.stats.secondary_color
 
         self.start_round()
 

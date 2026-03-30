@@ -37,6 +37,7 @@ class Fighter:
         self.vel_y = 0.0
         self.direction = Direction.RIGHT if player_id == 1 else Direction.LEFT
         self.on_ground = True
+        self.drop_through = False  # 穿台标志
 
         # 战斗属性
         self.health = self.stats.max_health
@@ -280,10 +281,17 @@ class Fighter:
             for px, py, pw, ph in self.stage.platforms:
                 if (px <= self.x <= px + pw and
                         py - 15 <= feet_y <= py + 8):
+                    # 穿台模式：跳过此平台
+                    if getattr(self, 'drop_through', False):
+                        continue
                     self.y = py
                     self.vel_y = 0
                     self.on_ground = True
                     break
+        # 落地后清除穿台标志
+        if self.on_ground or self.y >= GROUND_Y:
+            self.drop_through = False
+
         # 地面碰撞（兜底）
         if not self.on_ground and self.y >= GROUND_Y:
             self.y = GROUND_Y
@@ -296,6 +304,16 @@ class Fighter:
         # 攻击冷却
         if self.attack_cooldown > 0:
             self.attack_cooldown -= dt
+
+    def _is_on_platform(self) -> bool:
+        """判断是否站在平台上（非地面）"""
+        if not self.stage or not self.stage.platforms:
+            return False
+        feet_y = self.y
+        for px, py, pw, ph in self.stage.platforms:
+            if (px <= self.x <= px + pw and abs(feet_y - py) < 5):
+                return True
+        return False
 
     def apply_movement(self, left: bool, right: bool, up: bool, down: bool, block: bool):
         """应用移动输入"""
@@ -316,11 +334,17 @@ class Fighter:
             self.vel_x = 0
             return
 
-        # 下蹲
+        # 下键：在平台上时穿台，否则下蹲
         if down and self.on_ground:
-            self.state = FighterState.CROUCH
-            self.animator.set_state(AnimationState.CROUCH)
-            self.vel_x = 0
+            # 检查是否站在平台上（非地面）
+            if self._is_on_platform():
+                self.drop_through = True
+                self.on_ground = False
+                self.vel_y = 1.0  # 给一个向下的初速度，脱离平台
+            else:
+                self.state = FighterState.CROUCH
+                self.animator.set_state(AnimationState.CROUCH)
+                self.vel_x = 0
             return
 
         # 跳跃
@@ -330,16 +354,14 @@ class Fighter:
             self.state = FighterState.JUMP
             self.animator.set_state(AnimationState.JUMP)
 
-        # 左右移动
+        # 左右移动（朝向由 update_direction 根据对手位置统一控制，不要在这里设置）
         if left:
             self.vel_x = -self.stats.walk_speed
-            self.direction = Direction.LEFT
             if self.on_ground and self.state != FighterState.JUMP:
                 self.state = FighterState.WALK
                 self.animator.set_state(AnimationState.WALK)
         elif right:
             self.vel_x = self.stats.walk_speed
-            self.direction = Direction.RIGHT
             if self.on_ground and self.state != FighterState.JUMP:
                 self.state = FighterState.WALK
                 self.animator.set_state(AnimationState.WALK)
