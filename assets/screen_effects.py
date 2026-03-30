@@ -257,3 +257,54 @@ class ScreenEffects:
         if intensity == 'ultimate':
             self.flash_ultimate()
             self.slowmo_ultimate()
+
+    # ── 武器特效专用闪光 ────────────────────────────────────────────────────
+
+    def weapon_nuke_warning(self):
+        """核弹预警闪光"""
+        self.darkness(color=(80, 0, 0), duration=0.4, alpha=60)
+        self.flash(color=(255, 50, 0), duration=0.2, alpha=120)
+
+    def weapon_staff_flash(self, color: tuple[int, int, int]):
+        """法杖全屏特效闪光"""
+        self.flash(color=color, duration=0.25, alpha=100)
+        self.darkness(color=color, duration=0.3, alpha=40)
+
+    # ── 武器专属屏幕效果 ────────────────────────────────────────────────────
+
+    def weapon_nuke_impact(self):
+        """核弹命中 - 强烈屏幕震动 + 全屏橙红闪光"""
+        self.shake(intensity=20.0, duration=0.6)
+        self.flash(color=(255, 150, 50), duration=0.3, alpha=230)
+        self.darkness(color=(100, 30, 0), duration=0.5, alpha=120)
+        self.slowmo(factor=0.3, duration=0.5)
+
+    def weapon_gatling_hit(self):
+        """加特林命中 - 轻微震动 + 快速黄色闪光"""
+        self.shake(intensity=4.0, duration=0.15)
+        self.flash(color=(255, 200, 80), duration=0.1, alpha=100)
+
+    def weapon_staff_fire(self):
+        """红色法杖(火焰) - 橙红渐变 + 强烈震动"""
+        self.shake(intensity=12.0, duration=0.4)
+        self.flash(color=(255, 80, 0), duration=0.3, alpha=200)
+        self.darkness(color=(80, 20, 0), duration=0.35, alpha=80)
+        self.tint(color=(255, 100, 0), alpha=50)
+
+    def weapon_staff_wave(self):
+        """蓝色法杖(海啸) - 蓝色渐变 + 波浪式震动"""
+        self.shake(intensity=10.0, duration=0.5)
+        self.flash(color=(50, 150, 255), duration=0.35, alpha=180)
+        self.darkness(color=(0, 30, 100), duration=0.4, alpha=90)
+        self.tint(color=(0, 100, 200), alpha=60)
+
+    def weapon_staff_poison(self):
+        """绿色法杖(毒雾) - 绿色渐变 + 闪烁效果"""
+        self.shake(intensity=8.0, duration=0.4)
+        self.flash(color=(50, 200, 50), duration=0.25, alpha=150)
+        self.darkness(color=(20, 80, 20), duration=0.35, alpha=70)
+        self.tint(color=(0, 150, 0), alpha=40)
+
+    def clear_weapon_tint(self):
+        """清除武器色调效果"""
+        self.clear_tint()

@@ -66,12 +66,13 @@ class Fighter:
         self.effect_manager = EffectManager()
         self._char_effect_name = self.stats.name_cn
 
-        # 武器系统（从角色stats中读取weapon_type，自动查找对应WeaponData）
-        try:
-            wpn_type = WeaponType(self.stats.weapon_type)
-        except (ValueError, TypeError):
-            wpn_type = WeaponType.FIST
-        self.weapon_data: WeaponData = get_weapon(wpn_type)
+        # 武器系统（始终以拳头开始，武器通过道具掉落获得）
+        self.weapon_data: WeaponData = get_weapon(WeaponType.FIST)
+
+        # 道具掉落武器状态
+        self.equipped_weapon: Optional[str] = None   # e.g. "nuke_launcher"
+        self.weapon_uses: int = 0
+        self.weapon_attack_pending: bool = False
 
         # 攻击状态
         self.current_attack: Optional[MoveData] = None
@@ -178,6 +179,16 @@ class Fighter:
             hitbox_x = self.x - move.hitbox_offset[0] * dir_sign - move.hitbox_size[0] // 2
 
         return (hitbox_x, hitbox_y, move.hitbox_size[0], move.hitbox_size[1])
+
+    def attack_weapon(self) -> bool:
+        """
+        Called by Player.handle_input() when heavy-attack key pressed.
+        Returns True if a weapon attack was dispatched, False if unarmed.
+        """
+        if self.equipped_weapon and self.weapon_uses > 0:
+            self.weapon_attack_pending = True
+            return True
+        return False
 
     def handle_input(self, left: bool, right: bool, up: bool, down: bool,
                    light_attack: bool, heavy_attack: bool, special: bool, block: bool):
@@ -1340,6 +1351,7 @@ class Fighter:
 
         所有坐标均为 screen space (screen_x = world_x - camera_x)。
         武器根据当前姿态(pose)调整手部位置，并按 weapon_type 分发绘制。
+        优先绘制装备的掉落道具武器（核弹/加特林/法杖）。
         """
 
         facing = 1 if self.facing_right else -1
@@ -1349,22 +1361,16 @@ class Fighter:
         is_walking = (pose == 'walk')
 
         # --- 根据姿态计算手部位置（screen space） ---
-        # 角色脚部 screen_y = self.y
-        # 角色精灵顶 screen_y = self.y - 63，精灵宽度96像素，中心在 screen_x
-        # 身体宽度约40像素，手臂从身体侧面延伸约10-15像素
         if is_crouching:
-            hand_y_offset = -35   # 蹲下时手降低
+            hand_y_offset = -35
         elif is_attacking:
-            hand_y_offset = -60   # 攻击时手抬高并前伸
+            hand_y_offset = -60
         elif is_walking:
             bob = int(math.sin(pygame.time.get_ticks() * 0.01) * 3)
             hand_y_offset = -52 + bob
         else:
-            hand_y_offset = -50   # 站立默认
+            hand_y_offset = -50
 
-        # 手部水平位置：手臂末端在身体外侧约 5 像素处
-        # 站立时手臂自然下垂，末端约在 screen_x + 8*facing
-        # 攻击时手臂前伸，约在 screen_x + 30*facing
         if is_attacking:
             hand_x = screen_x + 30 * facing
         else:
@@ -1378,7 +1384,12 @@ class Fighter:
             total = max(self.current_attack.total_frames, 1)
             anim_idx = int((self.attack_frame / total) * 7) % 7
 
-        # 按 weapon_type 分发
+        # 优先绘制装备的掉落道具武器（核弹/加特林/法杖）
+        if self.equipped_weapon and self.weapon_uses > 0:
+            self._draw_equipped_weapon(surface, hand_x, hand_y, facing, is_attacking, screen_x)
+            return
+
+        # 按 weapon_type 分发（默认武器）
         weapon_type = self.weapon_data.weapon_type
         if weapon_type == WeaponType.FLAG:
             self._draw_flag_weapon(surface, hand_x, hand_y, facing, is_attacking)
@@ -1398,6 +1409,108 @@ class Fighter:
             self._draw_shuriken_weapon(surface, hand_x, hand_y, facing, is_attacking)
         else:
             self._draw_fist_weapon(surface, hand_x, hand_y, facing, is_attacking)
+
+    def _draw_equipped_weapon(self, surface, hand_x: float, hand_y: float, facing: int,
+                              is_attacking: bool, screen_x: float):
+        """绘制装备的掉落道具武器（核弹/加特林/法杖）"""
+        weapon = self.equipped_weapon
+        timer_t = pygame.time.get_ticks() * 0.001
+
+        if weapon == "nuke_launcher":
+            # 核弹发射器（肩扛式火箭筒）
+            dir_sign = 1 if facing > 0 else -1
+            # 筒身角度（肩扛）
+            if is_attacking:
+                angle = math.radians(30 * facing)
+            else:
+                angle = math.radians(15 * facing)
+            surf_w, surf_h = 70, 30
+            rot_surf = pygame.Surface((surf_w, surf_h), pygame.SRCALPHA)
+            # 筒身
+            pygame.draw.rect(rot_surf, (100, 100, 110), (5, 8, 60, 14), border_radius=3)
+            pygame.draw.rect(rot_surf, (140, 140, 150), (5, 8, 60, 6), border_radius=2)
+            # 发射口
+            pygame.draw.ellipse(rot_surf, (80, 80, 90), (55, 5, 12, 20))
+            pygame.draw.ellipse(rot_surf, (60, 60, 70), (55, 8, 12, 14))
+            # 把手
+            pygame.draw.rect(rot_surf, (120, 80, 40), (15, 18, 10, 12), border_radius=2)
+            # 准星
+            pygame.draw.circle(rot_surf, (255, 80, 80), (58, 15), 3)
+            pygame.draw.circle(rot_surf, (255, 200, 50), (58, 15), 2)
+            rot_surf = pygame.transform.rotate(rot_surf, -angle * facing * (180 / math.pi))
+            rw, rh = rot_surf.get_size()
+            surface.blit(rot_surf, (int(hand_x - rw // 2), int(hand_y - rh // 2 - 10)))
+            # 使用次数指示
+            for i in range(self.weapon_uses):
+                dot_x = hand_x + 15 * facing + i * 8 * facing
+                dot_y = hand_y + 15
+                pygame.draw.circle(surface, (255, 50, 50), (int(dot_x), int(dot_y)), 3)
+
+        elif weapon == "gatling":
+            # 加特林机枪（双手持握的大型机枪）
+            dir_sign = 1 if facing > 0 else -1
+            surf_w, surf_h = 80, 40
+            rot_surf = pygame.Surface((surf_w, surf_h), pygame.SRCALPHA)
+            # 枪身主体
+            pygame.draw.rect(rot_surf, (120, 120, 130), (5, 15, 70, 12), border_radius=2)
+            pygame.draw.rect(rot_surf, (160, 160, 170), (5, 15, 70, 5), border_radius=2)
+            # 枪管（多个圆筒表示转管）
+            for i in range(6):
+                bx = 65 + i * 2
+                pygame.draw.circle(rot_surf, (100, 100, 110), (bx, 18), 5)
+                pygame.draw.circle(rot_surf, (140, 140, 150), (bx, 18), 4)
+            # 供弹带
+            pygame.draw.rect(rot_surf, (80, 70, 60), (10, 23, 40, 6), border_radius=1)
+            # 把手
+            pygame.draw.rect(rot_surf, (80, 60, 40), (20, 22, 8, 14), border_radius=2)
+            pygame.draw.rect(rot_surf, (80, 60, 40), (38, 22, 8, 14), border_radius=2)
+            # 旋转动画
+            rot_angle = timer_t * 20 * facing
+            rot_surf = pygame.transform.rotate(rot_surf, 0)
+            surface.blit(rot_surf, (int(hand_x - 40), int(hand_y - 25)))
+            # 使用次数
+            for i in range(self.weapon_uses):
+                dot_x = hand_x - 30 * facing + i * 8 * facing
+                dot_y = hand_y + 25
+                pygame.draw.circle(surface, (255, 220, 80), (int(dot_x), int(dot_y)), 3)
+
+        elif weapon in ("staff_red", "staff_blue", "staff_green"):
+            # 法杖
+            staff_colors = {
+                "staff_red": ((200, 60, 60), (255, 150, 50), (255, 220, 100)),
+                "staff_blue": ((50, 100, 220), (100, 180, 255), (180, 230, 255)),
+                "staff_green": ((50, 180, 60), (150, 255, 100), (200, 255, 150)),
+            }
+            body_color, glow_color, tip_color = staff_colors.get(
+                weapon, ((200, 200, 200), (255, 255, 200), (255, 255, 255)))
+            # 杖身（倾斜的棒子）
+            pulse = math.sin(timer_t * 4) * 0.15 + 0.85
+            sway = math.sin(timer_t * 2) * 3
+            if is_attacking:
+                staff_end_x = hand_x + 25 * facing
+                staff_end_y = hand_y - 40
+            else:
+                staff_end_x = hand_x + 15 * facing + sway
+                staff_end_y = hand_y + 35
+            # 杖身
+            pygame.draw.line(surface, body_color, (int(hand_x), int(hand_y)),
+                           (int(staff_end_x), int(staff_end_y)), 6)
+            pygame.draw.line(surface, glow_color, (int(hand_x), int(hand_y)),
+                           (int(staff_end_x), int(staff_end_y)), 3)
+            # 杖头（发光球体）
+            orb_radius = int(10 * pulse)
+            glow_surf = pygame.Surface((orb_radius * 4 + 10, orb_radius * 4 + 10), pygame.SRCALPHA)
+            pygame.draw.circle(glow_surf, (*glow_color, 60), (orb_radius * 2 + 5, orb_radius * 2 + 5), orb_radius * 2)
+            pygame.draw.circle(glow_surf, (*tip_color, 200), (orb_radius * 2 + 5, orb_radius * 2 + 5), orb_radius)
+            pygame.draw.circle(glow_surf, (255, 255, 255), (orb_radius * 2 + 5, orb_radius * 2 + 5), orb_radius // 2)
+            surface.blit(glow_surf, (int(staff_end_x - orb_radius * 2 - 5), int(staff_end_y - orb_radius * 2 - 5)))
+            pygame.draw.circle(surface, glow_color, (int(staff_end_x), int(staff_end_y)), orb_radius)
+            pygame.draw.circle(surface, tip_color, (int(staff_end_x), int(staff_end_y)), orb_radius // 2)
+            # 使用次数
+            for i in range(self.weapon_uses):
+                dot_x = staff_end_x + (i - 1) * 8 * facing
+                dot_y = staff_end_y + 15
+                pygame.draw.circle(surface, body_color, (int(dot_x), int(dot_y)), 3)
 
     def _flip(self, surf: pygame.Surface) -> pygame.Surface:
         """左右翻转sprite"""

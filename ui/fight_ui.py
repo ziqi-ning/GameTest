@@ -312,7 +312,8 @@ class FightUI:
         self.p1_buffs.update(dt)
         self.p2_buffs.update(dt)
 
-    def draw(self, surface: pygame.Surface, p1_name: str = "P1", p2_name: str = "P2"):
+    def draw(self, surface: pygame.Surface, p1_name: str = "P1", p2_name: str = "P2",
+             p1_fighter=None, p2_fighter=None):
         """绘制UI"""
         # 绘制血条
         self.p1_health.draw(surface)
@@ -346,6 +347,51 @@ class FightUI:
 
         # 绘制公告
         self.announcement.draw(surface)
+
+        # 绘制武器HUD
+        if p1_fighter is not None:
+            self.draw_weapon_hud(surface, p1_fighter, True)
+        if p2_fighter is not None:
+            self.draw_weapon_hud(surface, p2_fighter, False)
+
+    def draw_weapon_hud(self, surface: pygame.Surface, fighter, is_player1: bool) -> None:
+        """Draw weapon icon and use count below the special bar."""
+        equipped = getattr(fighter, 'equipped_weapon', None)
+        if not equipped:
+            return
+
+        uses = getattr(fighter, 'weapon_uses', 0)
+
+        from entities.item_drop import ItemDrop
+        ItemDrop.load_images()
+        img = ItemDrop.ITEM_IMAGES.get(equipped)
+
+        # Position: below p1_special (left side) or p2_special (right side)
+        if is_player1:
+            x = 20
+        else:
+            x = self.screen_width - 190
+
+        y = 75  # below special bar (which is at y=55, h=15)
+
+        # Draw background
+        bg = pygame.Surface((80, 36), pygame.SRCALPHA)
+        pygame.draw.rect(bg, (20, 20, 30, 180), (0, 0, 80, 36), border_radius=4)
+        surface.blit(bg, (x, y))
+
+        # Draw weapon icon
+        if img:
+            surface.blit(img, (x + 2, y + 2))
+        else:
+            pygame.draw.rect(surface, (200, 150, 50), (x + 2, y + 2, 32, 32), border_radius=4)
+
+        # Draw use count
+        try:
+            font = pygame.font.SysFont("microsoftyahei", 20, bold=True)
+        except Exception:
+            font = pygame.font.Font(None, 20)
+        uses_text = font.render(f"x{uses}", True, (255, 220, 80))
+        surface.blit(uses_text, (x + 38, y + 8))
 
     def show_announcement(self, text: str, duration: float = 2.0):
         """显示公告"""

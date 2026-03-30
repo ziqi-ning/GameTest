@@ -38,7 +38,8 @@ class Player(Fighter):
         elif special:
             self.attack_special(move_index=0)
         elif heavy_attack and self.attack_cooldown <= 0:
-            self.attack_heavy()
+            if not self.attack_weapon():
+                self.attack_heavy()
         elif light_attack and self.attack_cooldown <= 0:
             self.attack_light()
 

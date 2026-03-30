@@ -14,6 +14,7 @@ from characters import get_character, CHARACTER_LIST
 from entities.fighter import Fighter
 from entities.player import Player
 from entities.ai_fighter import AIFighter
+from entities.item_drop import ItemDropManager
 from ui.menu import Menu
 from ui.character_select import CharacterSelect
 from ui.map_select import MapSelect, MAPS
@@ -85,6 +86,9 @@ class Game:
 
         # 上一帧按键状态（用于检测边缘触发）
         self.prev_keys = None
+
+        # 道具掉落管理器
+        self.item_drop_manager: Optional[ItemDropManager] = None
 
     def run(self):
         """游戏主循环"""
@@ -301,6 +305,30 @@ class Game:
         # 检测胜负
         self.check_match_end()
 
+        # 更新道具掉落系统
+        if self.round_state == RoundState.FIGHT and self.item_drop_manager is not None:
+            self.item_drop_manager.start()  # idempotent
+            players = [p for p in [self.player1, self.player2] if p]
+            self.item_drop_manager.update(dt, self.stage, players)
+            # Handle pending weapon attacks
+            for p in players:
+                if getattr(p, 'weapon_attack_pending', False):
+                    p.weapon_attack_pending = False
+                    equipped = getattr(p, 'equipped_weapon', None)
+                    self.item_drop_manager.execute_weapon_attack(p, self.stage)
+                    # 武器屏幕特效
+                    if equipped == "nuke_launcher":
+                        self.screen_effects.weapon_nuke_warning()
+                    elif equipped == "gatling":
+                        self.screen_effects.shake(intensity=3.0, duration=0.2)
+                    elif equipped in ("staff_red", "staff_blue", "staff_green"):
+                        staff_colors = {
+                            "staff_red": (255, 80, 20),
+                            "staff_blue": (50, 150, 255),
+                            "staff_green": (80, 220, 60)
+                        }
+                        self.screen_effects.weapon_staff_flash(staff_colors.get(equipped, (200, 200, 200)))
+
         # 更新UI
         self.fight_ui.update(dt, self.player1, self.player2)
 
@@ -387,6 +415,8 @@ class Game:
         else:
             self.player2 = Player(2, p2_data, 980, self.stage.ground_y, self.p2_char_index, self.stage)
 
+        self.item_drop_manager = ItemDropManager()
+
         self.announcement.show("ROUND 1", 1.5)
         pygame.time.set_timer(pygame.USEREVENT + 1, 2000, loops=1)
 
@@ -471,9 +501,13 @@ class Game:
             # 绘制VFX精灵动画（命中火花、斩击等）
             self.vfx_player.draw(main_surface)
 
+            # 绘制道具掉落
+            if self.item_drop_manager is not None:
+                self.item_drop_manager.draw(main_surface)
+
             p1_name = CHARACTER_LIST[self.p1_char_index]['name'] if hasattr(self, 'p1_char_index') else "P1"
             p2_name = CHARACTER_LIST[self.p2_char_index]['name'] if hasattr(self, 'p2_char_index') else "P2"
-            self.fight_ui.draw(main_surface, p1_name, p2_name)
+            self.fight_ui.draw(main_surface, p1_name, p2_name, self.player1, self.player2)
 
             # 绘制金币HUD
             if self.player1 and hasattr(self.player1, 'minion_manager'):
