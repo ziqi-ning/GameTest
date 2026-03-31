@@ -20,11 +20,13 @@ from ui.character_select import CharacterSelect
 from ui.map_select import MapSelect, MAPS
 from ui.fight_ui import FightUI, VictoryScreen
 from ui.timer import Timer, Announcement
+from ui.loading_screen import LoadingScreen
 from stages.dorm_stage import DormStage
 from stages.castle_stage import CastleStage
 from effects.ultimate_effect import UltimateEffectManager
 from assets.screen_effects import ScreenEffects
 from assets.vfx_player import VFXPlayer
+from entities.fighter import get_ultimate_entity_manager, reset_ultimate_entity_manager
 
 class Game:
     """游戏主类"""
@@ -48,6 +50,12 @@ class Game:
         self.map_select = MapSelect(SCREEN_WIDTH, SCREEN_HEIGHT)
         self.selected_map_index = 0  # 默认选第一张地图
         self.selected_map = None
+
+        # 加载界面
+        self.loading_screen = LoadingScreen(SCREEN_WIDTH, SCREEN_HEIGHT)
+        self._loading_stage = 0          # 加载阶段索引
+        self._loading_p1_char = 0       # 待加载的P1角色索引
+        self._loading_p2_char = 0       # 待加载的P2角色索引
 
         # 战斗（暂时使用默认颜色，会在 start_match 时更新）
         self.fight_ui = FightUI(SCREEN_WIDTH, SCREEN_HEIGHT)
@@ -79,6 +87,9 @@ class Game:
         # 史诗级屏幕特效系统
         self.screen_effects = ScreenEffects()
         self.vfx_player = VFXPlayer()
+
+        # 终极必杀技实体管理器（P1国旗/P2激光/P3黑影/P4鸡蛋，使用全局单例）
+        self.ultimate_entity_manager = get_ultimate_entity_manager(SCREEN_WIDTH, SCREEN_HEIGHT)
 
         # 模式
         self.is_vs_ai = True
@@ -121,6 +132,8 @@ class Game:
                         self.map_select.confirm_timer = 0.0
                     elif self.state == GameState.FIGHTING:
                         self.state = GameState.MENU
+                    elif self.state == GameState.LOADING:
+                        pass  # 加载中不允许取消
 
             # 定时器事件
             elif event.type == pygame.USEREVENT + 1:
@@ -188,10 +201,13 @@ class Game:
             self.character_select.update(dt)
         elif self.state == GameState.MAP_SELECT:
             self.map_select.update(dt)
+        elif self.state == GameState.LOADING:
+            self._update_loading(dt)
         elif self.state == GameState.FIGHTING:
             self.update_fight(dt)
         elif self.state == GameState.ROUND_END:
             self.victory_screen.update(dt)
+            self.update_fight(dt)  # 保持战斗画面更新
 
         # 更新终极特效
         self.ultimate_effect.update(dt)
@@ -213,6 +229,7 @@ class Game:
         # 如果终极特效正在播放，暂停游戏更新
         if self.ultimate_effect.is_playing():
             self.ultimate_effect.update(dt)
+            self.fight_ui.update(dt, self.player1, self.player2)
             return
 
         # 回合状态
@@ -248,7 +265,7 @@ class Game:
 
             # 先update更新_opponent_ref，再处理输入
             self.player1.update(dt, self.player2)
-            self.player1.handle_input(left, right, up, down, light, heavy, special, special_2, block, summon, toggle)
+            self.player1.handle_input(dt, left, right, up, down, light, heavy, special, special_2, block, summon, toggle)
 
             # 更新小兵管理器
             p2_manager = getattr(self.player2, 'minion_manager', None)
@@ -288,7 +305,7 @@ class Game:
                 p2_toggle = key_pressed(pygame.K_KP5)
                 # 先update更新_opponent_ref，再处理输入
                 self.player2.update(dt, self.player1)
-                self.player2.handle_input(p2_left, p2_right, p2_up, p2_down, False, False, p2_special, p2_special_2, p2_block, p2_summon, p2_toggle)
+                self.player2.handle_input(dt, p2_left, p2_right, p2_up, p2_down, False, False, p2_special, p2_special_2, p2_block, p2_summon, p2_toggle)
                 # 更新小兵管理器
                 p1_manager = getattr(self.player1, 'minion_manager', None)
                 self.player2.minion_manager.stage = self.stage
@@ -301,6 +318,12 @@ class Game:
                 direction = 1 if self.player2.facing_right else -1
                 self.ultimate_effect.trigger(char_name, "ultimate", direction)
                 self.player2.special_energy = 0
+
+        # 更新终极必杀技实体（P1国旗/P2激光/P3黑影/P4鸡蛋）
+        if self.player1 and self.player2:
+            self.ultimate_entity_manager.update(dt, self.player1, self.player2)
+            # 处理终极实体伤害
+            self._handle_ultimate_entity_damage()
 
         # 检测胜负
         self.check_match_end()
@@ -357,25 +380,175 @@ class Game:
         self.vfx_player.spawn_hit_cluster(x, y, intensity='medium')
         self.screen_effects.epic_hit(intensity='medium', color='white')
 
-    def start_match(self, p1_char: int, p2_char: int):
-        """开始对战"""
-        self.state = GameState.FIGHTING
-        self.p1_wins = 0
-        self.p2_wins = 0
-        self.fight_ui.set_round_wins(0, 0)
-        self.p1_char_index = p1_char
-        self.p2_char_index = p2_char
+    def _handle_ultimate_entity_damage(self):
+        """处理终极必杀技实体对角色的伤害"""
+        manager = self.ultimate_entity_manager
 
-        # 根据选择的地图创建场景
+        # ── P1 国旗伤害检测 ─────────────────────────────────
+        for flag in manager.p1_flags:
+            if not flag.active:
+                continue
+            if flag.has_dealt_damage:
+                continue  # 已经造成过伤害了
+            # 国旗一次性对敌方造成伤害
+            for target in [self.player1, self.player2]:
+                if not target:
+                    continue
+                if target.player_id == flag.owner_id:
+                    continue  # 不伤害自己
+                # 一次性伤害
+                flag.has_dealt_damage = True
+                target.take_damage(flag.damage, 15, 5, 1 if flag.x > target.x else -1)
+                target.effect_manager.add_text(
+                    f"★ {flag.damage}", target.x, target.y - 120, (255, 220, 0), 48, 1.5
+                )
+                target.effect_manager.add_particle_burst(target.x, target.y - 80, 20,
+                                                        (255, 200, 50), 8.0, 5.0)
+                self.screen_effects.shake(intensity=8.0, duration=0.3)
+                break  # 只打一个目标
+
+        # ── P2 激光伤害检测 ─────────────────────────────────
+        for laser in manager.p2_lasers:
+            if not laser.active:
+                continue
+            if laser.timer < laser.charge_duration:
+                continue  # 还在蓄力阶段
+            if laser.has_dealt_damage:
+                continue
+            # 激光对前方的敌人造成伤害（检查x轴方向）
+            for target in [self.player1, self.player2]:
+                if not target:
+                    continue
+                if target.player_id == laser.owner_id:
+                    continue  # 不伤害自己
+            # 检查目标是否在激光的横向和纵向范围内
+            target_x = target.x
+            target_h = 160  # 角色高度
+            if laser.direction > 0:  # 向右发射
+                if laser.x < target_x <= laser.x + laser.laser_length and laser.is_in_laser_row(target.y, target_h):
+                    laser.has_dealt_damage = True
+                    target.take_damage(laser.damage, 30, 15, laser.direction)
+                    target.effect_manager.add_text(
+                        f"★ {laser.damage}", target.x, target.y - 120, (50, 150, 255), 56, 1.5
+                    )
+                    target.effect_manager.add_particle_burst(target.x, target.y - 80, 30,
+                                                            (50, 100, 255), 12.0, 8.0)
+                    self.screen_effects.shake(intensity=15.0, duration=0.4)
+                else:  # 向左发射
+                    if laser.x > target_x >= laser.x + laser.laser_length and laser.is_in_laser_row(target.y, target_h):
+                        laser.has_dealt_damage = True
+                        target.take_damage(laser.damage, 30, 15, laser.direction)
+                        target.effect_manager.add_text(
+                            f"★ {laser.damage}", target.x, target.y - 120, (50, 150, 255), 56, 1.5
+                        )
+                        target.effect_manager.add_particle_burst(target.x, target.y - 80, 30,
+                                                                (50, 100, 255), 12.0, 8.0)
+                        self.screen_effects.shake(intensity=15.0, duration=0.4)
+
+        # ── P3 黑影伤害检测（敌人攻击黑影）──────────────────────
+        for shadow in manager.p3_shadows:
+            if not shadow.alive:
+                continue
+            # 敌人攻击黑影
+            for attacker in [self.player1, self.player2]:
+                if not attacker:
+                    continue
+                if attacker.player_id == shadow.owner_id:
+                    continue  # 不攻击自己的黑影
+                # 检查攻击判定框是否命中黑影
+                hit_rect = attacker.get_hitbox_rect()
+                if hit_rect:
+                    shadow_rect = shadow.get_hurtbox()
+                    if (hit_rect[0] < shadow_rect[0] + shadow_rect[2] and
+                        hit_rect[0] + hit_rect[2] > shadow_rect[0] and
+                        hit_rect[1] < shadow_rect[1] + shadow_rect[3] and
+                        hit_rect[1] + hit_rect[3] > shadow_rect[1]):
+                        damage = int(attacker.stats.attack_power * 0.5)
+                        shadow.take_damage(damage)
+                        attacker.effect_manager.add_particle_burst(
+                            shadow.x, shadow.y - 80, 8, (180, 80, 255), 3.0, 2.0
+                        )
+                        if not shadow.alive:
+                            attacker.effect_manager.add_text(
+                                "黑影消灭!", shadow.x, shadow.y - 150, (180, 80, 255), 32, 1.0
+                            )
+
+        # ── P4 鸡蛋伤害检测 ─────────────────────────────────
+        for egg in manager.p4_entities:
+            if not egg.active:
+                continue
+            for target in [self.player1, self.player2]:
+                if not target:
+                    continue
+                if target.player_id == egg.owner_id:
+                    continue  # 不伤害自己
+                if not egg.can_damage_target():
+                    continue
+                egg_rect = egg.get_egg_rect()
+                my_rect = (target.x - 35, target.y - 150, 70, 150)
+                if (egg_rect[0] < my_rect[0] + my_rect[2] and
+                    egg_rect[0] + egg_rect[2] > my_rect[0] and
+                    egg_rect[1] < my_rect[1] + my_rect[3] and
+                    egg_rect[1] + egg_rect[3] > my_rect[1]):
+                    target.take_damage(egg.damage, 5, 1,
+                                      1 if egg.x > target.x else -1)
+                    target.effect_manager.add_text(
+                        f"啄! {egg.damage}", target.x, target.y - 120,
+                        (200, 180, 80), 32, 0.5
+                    )
+
+    def _update_loading(self, dt: float):
+        """分帧加载资源，避免一次性卡顿"""
+        self.loading_screen.update(dt)
+
+        stages = [
+            (0.10, "加载地图资源...",        self._loading_step_bg),
+            (0.30, "预渲染地图背景...",      self._loading_step_bg_cache),
+            (0.55, "加载角色精灵...",       self._loading_step_sprites),
+            (0.75, "加载道具贴图...",       self._loading_step_items),
+            (0.90, "初始化战斗系统...",     self._loading_step_fight),
+            (1.00, "战斗开始!",             self._loading_step_done),
+        ]
+
+        prog, status, action = stages[min(self._loading_stage, len(stages) - 1)]
+        self.loading_screen.set_progress(prog, status)
+
+        if action(dt):
+            self._loading_stage += 1
+            if self._loading_stage >= len(stages):
+                self.state = GameState.FIGHTING
+                self.start_round()
+
+    def _loading_step_bg(self, dt: float) -> bool:
+        """步骤0：加载地图"""
         map_info = MAPS[self.selected_map_index]
         self.selected_map = map_info
         self.stage = map_info['stage_class'](SCREEN_WIDTH, SCREEN_HEIGHT)
+        self.loading_screen.set_map_name(map_info['name'])
+        return True
 
-        # 获取角色数据并更新 UI 颜色
-        p1_data = get_character(p1_char)
-        p2_data = get_character(p2_char)
+    def _loading_step_bg_cache(self, dt: float) -> bool:
+        """步骤1：触发地图背景预渲染（在下一帧首次绘制时完成）"""
+        self.stage._ensure_cache()
+        return True
 
-        # 更新技能名称
+    def _loading_step_sprites(self, dt: float) -> bool:
+        """步骤2：加载角色精灵"""
+        from animation.sprite_loader import sprite_loader
+        sprite_loader.preload_all()
+        return True
+
+    def _loading_step_items(self, dt: float) -> bool:
+        """步骤3：加载道具贴图"""
+        from entities.item_drop import ItemDrop
+        ItemDrop.load_images()
+        return True
+
+    def _loading_step_fight(self, dt: float) -> bool:
+        """步骤4：初始化战斗数据"""
+        p1_data = get_character(self._loading_p1_char)
+        p2_data = get_character(self._loading_p2_char)
+
         p1_skills = [s.name_cn for s in p1_data.special] if p1_data.special else ["必杀1", "必杀2"]
         p2_skills = [s.name_cn for s in p2_data.special] if p2_data.special else ["必杀1", "必杀2"]
         self.fight_ui.set_skill_names(p1_skills, p2_skills)
@@ -385,7 +558,6 @@ class Game:
         self.fight_ui.p1_health.health_high = p1_data.stats.color
         self.fight_ui.p1_health.health_med = p1_data.stats.secondary_color
         self.fight_ui.p1_health.max_health = p1_data.stats.max_health
-        # 同步技能槽颜色
         self.fight_ui.p1_skills.skill1_color = p1_data.stats.color
         self.fight_ui.p1_skills.skill2_color = p1_data.stats.secondary_color
 
@@ -394,11 +566,29 @@ class Game:
         self.fight_ui.p2_health.health_high = p2_data.stats.color
         self.fight_ui.p2_health.health_med = p2_data.stats.secondary_color
         self.fight_ui.p2_health.max_health = p2_data.stats.max_health
-        # 同步技能槽颜色
         self.fight_ui.p2_skills.skill1_color = p2_data.stats.color
         self.fight_ui.p2_skills.skill2_color = p2_data.stats.secondary_color
+        return True
 
-        self.start_round()
+    def _loading_step_done(self, dt: float) -> bool:
+        """步骤5：完成"""
+        return True
+
+    def start_match(self, p1_char: int, p2_char: int):
+        """开始对战 - 启动分帧加载"""
+        self.state = GameState.LOADING
+        self._loading_stage = 0
+        self._loading_p1_char = p1_char
+        self._loading_p2_char = p2_char
+        self.p1_wins = 0
+        self.p2_wins = 0
+        self.fight_ui.set_round_wins(0, 0)
+        self.ultimate_entity_manager.clear()
+        self.p1_char_index = p1_char
+        self.p2_char_index = p2_char
+        self.loading_screen.phase_in = 0.0
+        self.loading_screen._display_progress = 0.0
+        self.loading_screen.target_progress = 0.0
 
     def start_round(self):
         """开始一回合"""
@@ -411,7 +601,8 @@ class Game:
 
         self.player1 = Player(1, p1_data, 300, self.stage.ground_y, self.p1_char_index, self.stage)
         if self.is_vs_ai:
-            self.player2 = AIFighter(2, p2_data, 980, self.stage.ground_y, self.p2_char_index, self.stage)
+            self.player2 = AIFighter(2, p2_data, 980, self.stage.ground_y, self.p2_char_index, self.stage,
+                                     item_manager=self.item_drop_manager)
         else:
             self.player2 = Player(2, p2_data, 980, self.stage.ground_y, self.p2_char_index, self.stage)
 
@@ -485,6 +676,8 @@ class Game:
             self.character_select.draw(main_surface)
         elif self.state == GameState.MAP_SELECT:
             self.map_select.draw(main_surface)
+        elif self.state == GameState.LOADING:
+            self.loading_screen.draw(main_surface)
         elif self.state in [GameState.FIGHTING, GameState.ROUND_END]:
             self.stage.draw(main_surface)
             if self.player1:
@@ -518,7 +711,10 @@ class Game:
                     main_surface, SCREEN_WIDTH - 375, 52, False, self.fight_ui.name_font)
             self.announcement.draw(main_surface)
 
-            # 绘制终极必杀技特效
+            # 绘制终极必杀技实体（国旗/激光/黑影/鸡蛋）
+            self.ultimate_entity_manager.draw(main_surface)
+
+            # 绘制终极必杀技特效（公告文字等）
             self.ultimate_effect.draw(main_surface)
 
             # 绘制屏幕特效（色调变暗等覆盖层）

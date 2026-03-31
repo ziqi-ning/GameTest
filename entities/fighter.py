@@ -18,6 +18,22 @@ from characters.character_base import CharacterData, MoveData, SpecialMoveData
 from entities.weapon_data import WeaponType, get_weapon, WeaponData
 from assets.weapon_assets import WeaponAssets
 
+# 全局终极实体管理器（所有角色共享同一个实例）
+_global_ultimate_entity_manager = None
+
+def get_ultimate_entity_manager(screen_width: int = 1280, screen_height: int = 720):
+    """获取全局终极实体管理器（单例）"""
+    global _global_ultimate_entity_manager
+    if _global_ultimate_entity_manager is None:
+        from entities.ultimate_entities import UltimateEntityManager
+        _global_ultimate_entity_manager = UltimateEntityManager(screen_width, screen_height)
+    return _global_ultimate_entity_manager
+
+def reset_ultimate_entity_manager():
+    """重置全局终极实体管理器（换局时调用）"""
+    global _global_ultimate_entity_manager
+    _global_ultimate_entity_manager = None
+
 
 class Fighter:
     """战斗角色基类"""
@@ -116,6 +132,9 @@ class Fighter:
         self.junshi_multi_shot = 0  # 连发是否激活（0=未激活，1=激活）
         self.junshi_multi_shot_timer = 0.0  # 连发倒计时
 
+        # 终极必杀技实体管理器（使用全局单例，所有角色共享）
+        self.ultimate_entity_manager = get_ultimate_entity_manager()
+
         # 装备必杀技
         if char_data.special:
             self.special_manager.set_special_moves(char_data.special)
@@ -199,6 +218,10 @@ class Fighter:
         """更新角色状态"""
         # 更新特效系统
         self.effect_manager.update(dt)
+
+        # 更新终极必杀技实体（P1国旗/P2激光/P3黑影/P4鸡蛋）
+        # 注：实体在 Fighter.attack_special() 中生成，伤害由 main.py 统一处理
+        # 这里仅被动更新实体timer以驱动动画
 
         # 更新投射物系统
         if opponent:
@@ -447,7 +470,7 @@ class Fighter:
                 # 非军师或无连发buff时，发射正常投射物
                 self._fire_ranged_attack(move)
 
-    def attack_special(self, move_index: int = 0):
+    def attack_special(self, dt: float, move_index: int = 0):
         """发动必杀技（L键=0伤害，I键=1增益）"""
         if move_index >= len(self.char_data.special):
             return  # 没有第二个必杀技
@@ -491,11 +514,97 @@ class Fighter:
         self.special_hit_count = 0
         self.ultimate_pending_trigger = True  # 通知 main.py 触发终极特效
 
-        # 触发必杀技特效（按技能索引区分）
-        effect_func = CharacterEffects.get_effect_function(self._char_effect_name, move_index)
-        if effect_func:
-            effect_x = self.x + (50 if self.facing_right else -50)
-            effect_func(self.effect_manager, effect_x, self.y - 50, move.name_cn)
+        # 初始化攻击帧（由 Fighter.update() 的 update_attack() 统一推进）
+        self.attack_frame = 0
+
+        # 根据 effect_type 触发不同的终极实体
+        effect_type = move.effect_type
+        char_name = self._char_effect_name
+        opponent_ref = None
+        if hasattr(self, '_opponent_ref'):
+            opponent_ref = self._opponent_ref
+
+        if effect_type == "national_flag":
+            # P1龚大哥：全屏五星红旗
+            owner_is_p1 = (self.player_id == 1)
+            self.ultimate_entity_manager.spawn_p1_flag(
+                self.x, self.y, self.player_id, owner_is_p1
+            )
+            self.effect_manager.add_text(
+                "五星红旗!", self.x, self.y - 180, (255, 220, 0), 48, 2.0
+            )
+            self.effect_manager.add_particle_burst(self.x, self.y - 100, 40,
+                                                 (255, 200, 50), 15.0, 10.0)
+            self.effect_manager.add_ring(self.x, self.y - 80, 100,
+                                       (255, 50, 50), 1.5)
+            self.screen_shake = 10
+
+        elif effect_type == "laser_beam":
+            # P2军师：高能激光对同一行
+            self.ultimate_entity_manager.spawn_p2_laser(
+                self.x, self.y, self.player_id,
+                direction=(1 if self.facing_right else -1),
+                owner=self
+            )
+            self.effect_manager.add_text(
+                "高能激光!", self.x, self.y - 200, (50, 150, 255), 52, 2.0
+            )
+            self.effect_manager.add_particle_burst(self.x, self.y - 90, 50,
+                                                 (50, 100, 255), 18.0, 12.0)
+            self.effect_manager.add_ring(self.x, self.y - 90, 80,
+                                       (50, 200, 255), 1.2)
+            self.screen_shake = 15
+
+        elif effect_type == "shadow_clone":
+            # P3神秘人：黑影瞬移到敌人身后
+            if opponent_ref:
+                self.ultimate_entity_manager.spawn_p3_shadow(
+                    self.x, self.y, self.player_id,
+                    max_health=self.max_health,
+                    target_x=opponent_ref.x,
+                    target_facing_right=opponent_ref.facing_right,
+                    duration=move.effect_duration
+                )
+            else:
+                self.ultimate_entity_manager.spawn_p3_shadow(
+                    self.x, self.y, self.player_id,
+                    max_health=self.max_health,
+                    target_x=self.x,
+                    target_facing_right=self.facing_right,
+                    duration=move.effect_duration
+                )
+            self.effect_manager.add_text(
+                "黑影瞬斩!", self.x, self.y - 200, (180, 60, 255), 50, 2.0
+            )
+            self.effect_manager.add_particle_burst(self.x, self.y - 80, 60,
+                                                 (80, 20, 160), 15.0, 10.0)
+            self.effect_manager.add_ring(self.x, self.y - 80, 60,
+                                       (120, 40, 200), 1.0)
+            self.screen_shake = 12
+
+        elif effect_type == "chicken_egg":
+            # P4籽桐：召唤大公鸡和鸡蛋
+            trapped_id = opponent_ref.player_id if opponent_ref else 2
+            self.ultimate_entity_manager.spawn_p4_egg(
+                self.x, self.y, self.player_id,
+                trapped_target_id=trapped_id,
+                trap_duration=move.effect_duration
+            )
+            self.effect_manager.add_text(
+                "雕与蛋!", self.x, self.y - 200, (80, 200, 80), 52, 2.0
+            )
+            self.effect_manager.add_particle_burst(self.x, self.y - 80, 50,
+                                                 (200, 180, 80), 15.0, 10.0)
+            self.effect_manager.add_ring(self.x, self.y - 80, 70,
+                                       (150, 255, 100), 1.2)
+            self.screen_shake = 10
+
+        else:
+            # 旧版必杀技（兼容）
+            effect_func = CharacterEffects.get_effect_function(char_name, move_index)
+            if effect_func:
+                effect_x = self.x + (50 if self.facing_right else -50)
+                effect_func(self.effect_manager, effect_x, self.y - 50, move.name_cn)
 
     def _activate_buff_effect(self, move, opponent=None):
         """激活增益效果（I键必杀技）"""
@@ -595,8 +704,27 @@ class Fighter:
             # 检测命中敌方小兵
             self._check_hit_enemy_minions()
 
-        # 攻击结束
-        if self.attack_frame >= move.total_frames:
+        # 攻击结束（普通攻击用帧数，必杀技用特效时长控制）
+        # 必杀技：优先用 animation_lock 控制玩家锁定时长，effect_duration 控制实体存活
+        if self.is_special_attacking and self.current_special:
+            # 锁定时长阈值（帧数）
+            lock_duration = self.current_special.animation_lock
+            if lock_duration <= 0:
+                lock_duration = self.current_special.effect_duration
+            if lock_duration <= 0:
+                lock_duration = self.current_special.total_frames / 60.0
+            lock_frames = int(lock_duration * 60)
+
+            if self.attack_frame >= lock_frames:
+                self.is_attacking = False
+                self.is_special_attacking = False
+                self.current_attack = None
+                self.current_special = None
+                self.attack_cooldown = 0.1
+                self.state = FighterState.IDLE
+                self.animator.set_state(AnimationState.IDLE)
+                return
+        elif self.attack_frame >= move.total_frames:
             self.is_attacking = False
             self.is_special_attacking = False
             self.current_attack = None
@@ -614,6 +742,17 @@ class Fighter:
             move_data = self.current_attack
 
         if not move_data or not opponent:
+            return
+
+        # 黑影必杀技（shadow_clone）不需要自身造成伤害，伤害由黑影实体处理
+        if hasattr(move_data, 'effect_type') and move_data.effect_type == "shadow_clone":
+            return
+
+        # 国旗/激光/鸡蛋必杀技的伤害由实体系统（ultimate_entities）统一处理
+        # 不走 hitbox 碰撞，避免双重伤害
+        if hasattr(move_data, 'effect_type') and move_data.effect_type in (
+            "national_flag", "laser_beam", "chicken_egg"
+        ):
             return
 
         # 构建攻击数据用于命中检测
@@ -1082,11 +1221,8 @@ class Fighter:
         move_name = ""
 
         if self.is_special_attacking and self.current_special:
-            hitbox_rect = self.get_special_hitbox_rect()
-            if hitbox_rect:
-                move_name = self.current_special.name_cn
-                color = (255, 200, 50, 120)   # 金色 - 必杀技
-                border_color = (255, 220, 80)
+            # 必杀技hitbox调试框已禁用（全屏技能不需要）
+            pass
         elif self.is_attacking and self.current_attack:
             hitbox_rect = self.get_hitbox_rect()
             if hitbox_rect:
@@ -2091,4 +2227,6 @@ class Fighter:
         self.effect_manager.slash_effects.clear()
         # 清除投射物
         self.projectile_manager.projectiles.clear()
+        # 清除终极必杀技实体（重置全局管理器）
+        reset_ultimate_entity_manager()
         self.last_hit_by = 0

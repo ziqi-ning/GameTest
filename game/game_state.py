@@ -7,6 +7,7 @@ class GameState(Enum):
     MENU = auto()
     CHARACTER_SELECT = auto()
     MAP_SELECT = auto()
+    LOADING = auto()
     FIGHTING = auto()
     ROUND_START = auto()
     ROUND_END = auto()

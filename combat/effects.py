@@ -283,11 +283,16 @@ class CharacterEffects:
     # ── 龚大哥：爱国 ──────────────────────────────────────────────
     @staticmethod
     def gong_dage_special0(manager: EffectManager, x: float, y: float, move_name: str = ""):
-        """爱国之心 — 火焰爆发 + 红旗飘扬"""
-        manager.add_particle_burst(x, y, 30, (255, 80, 30), 12.0, 10.0)
-        manager.add_ring(x, y, 80, (255, 50, 50), 0.8)
-        manager.add_ring(x, y - 30, 50, (255, 200, 50), 0.6)
-        manager.add_text(move_name, x, y - 100, (255, 80, 30), 48, 2.0)
+        """爱国之心 — 全屏五星红旗震撼展开"""
+        # 金色光芒从中心爆发
+        manager.add_particle_burst(x, y, 50, (255, 220, 0), 20.0, 12.0)
+        # 多层光环扩散
+        manager.add_ring(x, y - 60, 80, (255, 200, 50), 1.5)
+        manager.add_ring(x, y - 60, 120, (255, 100, 30), 1.2)
+        manager.add_ring(x, y - 60, 160, (220, 30, 30), 1.0)
+        # 文字公告
+        manager.add_text("★ 五星红旗! ★", x, y - 180, (255, 220, 0), 56, 2.5)
+        manager.add_text(move_name, x, y - 220, (220, 30, 30), 42, 2.2)
 
     @staticmethod
     def gong_dage_special1(manager: EffectManager, x: float, y: float, move_name: str = ""):
@@ -308,11 +313,16 @@ class CharacterEffects:
     # ── 军师：实验室 ────────────────────────────────────────────
     @staticmethod
     def junshi_special0(manager: EffectManager, x: float, y: float, move_name: str = ""):
-        """实验室终极射线 — 能量炮发射"""
-        manager.add_particle_burst(x, y, 35, (100, 50, 255), 15.0, 8.0)
-        manager.add_ring(x, y, 90, (50, 100, 255), 0.8)
-        manager.add_slash(x, y, 0, (150, 100, 255), 150)
-        manager.add_text(move_name, x, y - 110, (100, 50, 255), 50, 2.0)
+        """高能激光 — 蓝色能量聚集后发射高能激光束"""
+        # 蓄力阶段：能量聚集
+        for i in range(4):
+            manager.add_ring(x, y - 60, 30 + i * 20, (50, 150, 255), 1.0)
+        manager.add_particle_burst(x, y - 60, 40, (50, 100, 255), 15.0, 10.0)
+        # 激光发射公告
+        manager.add_text("◆ 高能激光! ◆", x, y - 180, (50, 150, 255), 56, 2.5)
+        manager.add_text(move_name, x, y - 220, (30, 100, 200), 42, 2.2)
+        # 电弧斩击
+        manager.add_slash(x, y - 60, 0, (100, 200, 255), 180)
 
     @staticmethod
     def junshi_special1(manager: EffectManager, x: float, y: float, move_name: str = ""):
@@ -334,20 +344,19 @@ class CharacterEffects:
     # ── 神秘人：叛国 ────────────────────────────────────────────
     @staticmethod
     def shenmiren_special0(manager: EffectManager, x: float, y: float, move_name: str = ""):
-        """叛国瞬斩 — 瞬移斩击：黑色残影+紫色刀光爆发"""
-        # 起点残影消散效果
-        manager.add_ring(x, y - 50, 40, (20, 20, 40), 0.5)
-        manager.add_particle_burst(x, y - 50, 15, (40, 40, 60), 8.0, 6.0)
-        # 终点爆发：多重刀光斩击
+        """黑影瞬斩 — 黑影分裂瞬移到敌人身后持续造成伤害"""
+        # 暗影爆发
         for angle_offset in [-0.4, -0.2, 0, 0.2, 0.4]:
-            manager.add_slash(x, y - 30, angle_offset, (180, 60, 220), 180)
-        # 核心紫色爆发环
-        manager.add_ring(x, y - 40, 70, (140, 40, 200), 0.6)
-        manager.add_ring(x, y - 40, 45, (100, 20, 160), 0.4)
-        # 大量紫色粒子喷射
-        manager.add_particle_burst(x, y - 40, 40, (120, 30, 180), 12.0, 9.0)
-        manager.add_particle_burst(x, y - 40, 25, (200, 100, 255), 10.0, 6.0)
-        manager.add_text(move_name, x, y - 130, (200, 80, 255), 52, 2.2)
+            manager.add_slash(x, y - 50, angle_offset, (120, 40, 200), 180)
+        # 多层紫黑光环
+        manager.add_ring(x, y - 50, 90, (60, 10, 120), 1.5)
+        manager.add_ring(x, y - 50, 60, (100, 30, 180), 1.2)
+        # 紫色粒子流
+        manager.add_particle_burst(x, y - 50, 50, (80, 20, 160), 15.0, 10.0)
+        manager.add_particle_burst(x, y - 50, 30, (160, 60, 255), 12.0, 7.0)
+        manager.add_text("◆ 黑影瞬斩! ◆", x, y - 180, (180, 60, 255), 56, 2.5)
+        manager.add_text(move_name, x, y - 220, (120, 40, 200), 42, 2.2)
+        manager.add_text("有血条可被打死!", x, y - 250, (220, 100, 255), 30, 2.0)
 
     @staticmethod
     def shenmiren_special1(manager: EffectManager, x: float, y: float, move_name: str = ""):
@@ -380,50 +389,29 @@ class CharacterEffects:
     # ── 籽桐：雕 ────────────────────────────────────────────────
     @staticmethod
     def zitong_special0(manager: EffectManager, x: float, y: float, move_name: str = ""):
-        """雕之领域 — 巨鹰展翅：多层绿色光环+羽毛雨+羽翼斩击"""
-        # 大范围领域光环（多层）
-        manager.add_ring(x, y - 50, 100, (30, 180, 60), 1.5)
-        manager.add_ring(x, y - 50, 80, (50, 220, 80), 1.2)
-        manager.add_ring(x, y - 50, 60, (80, 255, 100), 1.0)
-        # 羽翼斩击（表现巨鹰展开翅膀）
-        manager.add_slash(x, y - 80, 0.6, (100, 255, 130), 160)
-        manager.add_slash(x, y - 80, -0.6, (100, 255, 130), 160)
-        manager.add_slash(x, y - 50, 0, (80, 220, 100), 180)
-        # 羽毛爆发（大量羽毛从天而降）
-        for _ in range(5):
-            fx = x + random.uniform(-60, 60)
-            fy = y + random.uniform(-40, 40)
-            manager.add_particle_burst(fx, fy, 12, (80, 200, 100), 5.0, 6.0)
-            manager.add_particle_burst(fx, fy, 8, (160, 255, 150), 4.0, 4.0)
-        # 螺旋上升粒子
-        manager.add_particle_burst(x, y - 30, 25, (50, 200, 80), 9.0, 8.0)
-        manager.add_particle_burst(x, y - 50, 20, (120, 255, 140), 7.0, 5.0)
-        manager.add_text(move_name, x, y - 140, (50, 255, 80), 50, 2.2)
-        # 领域文字
-        manager.add_text("减速领域！", x, y - 180, (100, 255, 150), 34, 2.0)
+        """雕与蛋 — 召唤大公鸡和鸡蛋，把敌人吸入持续啄击"""
+        # 鸡+蛋的绿色光芒爆发
+        manager.add_particle_burst(x, y, 50, (200, 180, 80), 18.0, 12.0)
+        manager.add_particle_burst(x, y, 30, (150, 255, 100), 15.0, 8.0)
+        # 蛋形光环
+        manager.add_ring(x, y - 60, 100, (150, 255, 100), 1.5)
+        manager.add_ring(x, y - 60, 70, (200, 180, 80), 1.2)
+        manager.add_ring(x, y - 60, 40, (255, 200, 80), 1.0)
+        manager.add_text("★ 雕与蛋! ★", x, y - 180, (80, 255, 100), 56, 2.5)
+        manager.add_text(move_name, x, y - 220, (150, 255, 80), 42, 2.2)
+        manager.add_text("吸入敌人持续啄击5秒!", x, y - 250, (200, 180, 80), 30, 2.0)
 
     @staticmethod
     def zitong_special1(manager: EffectManager, x: float, y: float, move_name: str = ""):
-        """雕羽风暴 — 羽毛龙卷：多波羽毛乱舞+旋转斩击+风暴粒子"""
-        # 多波羽毛爆发（模拟羽毛被卷起的效果）
-        for i in range(5):
-            bx = x + random.uniform(-50, 50)
-            by = y + random.uniform(-40, 40)
-            manager.add_particle_burst(bx, by, 15, (80, 200, 100), 8.0, 6.0)
-            manager.add_particle_burst(bx, by, 10, (140, 255, 160), 6.0, 4.0)
-        # 旋转斩击轨迹（表现风暴的切割力）
-        for angle in [0, 0.5, 1.0, 1.5, 2.0, 2.5]:
-            manager.add_slash(x, y - 30, angle, (100, 220, 120), 150)
-        # 风暴核心环
-        manager.add_ring(x, y - 40, 80, (60, 200, 80), 1.0)
-        manager.add_ring(x, y - 40, 55, (100, 255, 120), 0.8)
-        manager.add_ring(x, y - 40, 35, (140, 255, 160), 0.6)
-        # 螺旋上升羽毛粒子
-        manager.add_particle_burst(x, y - 20, 35, (80, 200, 100), 10.0, 7.0)
-        manager.add_particle_burst(x, y - 40, 25, (120, 255, 140), 8.0, 5.0)
-        manager.add_text(move_name, x, y - 130, (80, 255, 100), 46, 2.2)
-        # 多段打击提示
-        manager.add_text("多段命中！", x, y - 170, (150, 255, 180), 30, 1.8)
+        """冰雕凝视 — 冻结敌人2.5秒（原5秒削弱）"""
+        # 冰冻特效
+        manager.add_particle_burst(x, y, 40, (100, 200, 255), 12.0, 8.0)
+        manager.add_particle_burst(x, y, 25, (200, 230, 255), 10.0, 6.0)
+        manager.add_ring(x, y - 50, 80, (50, 150, 255), 1.5)
+        manager.add_ring(x, y - 50, 50, (100, 200, 255), 1.2)
+        manager.add_ring(x, y - 50, 25, (200, 240, 255), 1.0)
+        manager.add_text("◆ 冰雕凝视! ◆", x, y - 180, (50, 200, 255), 56, 2.5)
+        manager.add_text(f"{move_name} (2.5秒)", x, y - 220, (100, 180, 255), 42, 2.2)
 
     @staticmethod
     def zitong_effects(manager: EffectManager, x: float, y: float, move_name: str = ""):

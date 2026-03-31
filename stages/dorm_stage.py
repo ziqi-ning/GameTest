@@ -78,21 +78,106 @@ class DormStage(Stage):
         # 寝室内装饰元素
         self.decorations = []
 
-    def draw_background(self, surface: pygame.Surface):
-        """绘制寝室背景"""
-        # 渐变墙面（暖黄色）
+    def _render_bg_to_cache(self) -> pygame.Surface:
+        """将寝室背景预渲染到缓存"""
+        surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        # 渐变墙面
         for y in range(self.height):
             ratio = y / self.height
             r = int(90 * (1 - ratio * 0.3) + 70 * ratio)
             g = int(70 * (1 - ratio * 0.3) + 55 * ratio)
             b = int(55 * (1 - ratio * 0.3) + 42 * ratio)
-            pygame.draw.line(surface, (r, g, b), (0, y), (self.width, y))
+            pygame.draw.line(surf, (r, g, b), (0, y), (self.width, y), 1)
+        # 墙线细节
+        pygame.draw.line(surf, (110, 85, 65), (0, 0), (self.width, 0), 8)
+        pygame.draw.line(surf, (120, 90, 60), (0, 560), (self.width, 560), 5)
+        for y in range(80, 560, 120):
+            for x in range(0, self.width, 4):
+                pygame.draw.line(surf, (100, 78, 55), (x, y), (x + 2, y), 1)
+        # 窗户
+        wx, wy, ww, wh = 900, 60, 300, 200
+        pygame.draw.rect(surf, (80, 65, 45), (wx - 6, wy - 6, ww + 12, wh + 12), border_radius=4)
+        pygame.draw.rect(surf, (15, 20, 40), (wx, wy, ww, wh))
+        import random
+        random.seed(42)
+        for _ in range(20):
+            sx = wx + random.randint(0, ww - 2)
+            sy = wy + random.randint(0, wh // 2 - 2)
+            brightness = random.randint(180, 255)
+            pygame.draw.circle(surf, (brightness, brightness, brightness), (sx, sy), 1)
+        pygame.draw.circle(surf, (240, 230, 180), (wx + 240, wy + 50), 30)
+        pygame.draw.circle(surf, (15, 20, 40), (wx + 250, wy + 45), 28)
+        pygame.draw.line(surf, (80, 65, 45), (wx + ww // 2, wy), (wx + ww // 2, wy + wh), 4)
+        pygame.draw.line(surf, (80, 65, 45), (wx, wy + wh // 2), (wx, wy + wh), 4)
+        pygame.draw.rect(surf, (80, 65, 45), (wx, wy, ww, wh), 4, border_radius=2)
+        # 串灯电线
+        light_positions = [(100, 55), (200, 58), (300, 52), (400, 57), (500, 54),
+                           (600, 56), (700, 53), (800, 58), (900, 55), (1000, 52), (1100, 57), (1200, 54)]
+        prev = light_positions[0]
+        for lx, ly in light_positions[1:]:
+            pygame.draw.line(surf, (60, 45, 30), prev, (lx, ly + 6), 1)
+            prev = (lx, ly + 6)
+        colors = [(255, 100, 100), (255, 220, 100), (100, 220, 255), (200, 100, 255), (255, 180, 100)]
+        for i, (lx, ly) in enumerate(light_positions):
+            c = colors[i % len(colors)]
+            pygame.draw.circle(surf, c, (lx, ly), 6)
+            pygame.draw.circle(surf, (255, 255, 220), (lx, ly), 3)
+        # 海报
+        pygame.draw.rect(surf, (30, 30, 60), (30, 80, 80, 110))
+        pygame.draw.rect(surf, (220, 200, 50), (35, 85, 70, 50))
+        pygame.draw.rect(surf, (200, 50, 50), (35, 145, 70, 40))
+        pygame.draw.rect(surf, (255, 255, 255), (30, 80, 80, 110), 2)
+        pygame.draw.rect(surf, (60, 20, 20), (140, 120, 70, 90))
+        pygame.draw.rect(surf, (220, 170, 50), (145, 125, 60, 40))
+        pygame.draw.rect(surf, (255, 255, 255), (140, 120, 70, 90), 2)
+        pygame.draw.rect(surf, (40, 80, 40), (500, 100, 60, 80))
+        pygame.draw.rect(surf, (200, 220, 200), (505, 105, 50, 30))
+        pygame.draw.rect(surf, (255, 255, 255), (500, 100, 60, 80), 2)
+        pygame.draw.rect(surf, (255, 100, 100), (1250, 100, 25, 30))
+        pygame.draw.rect(surf, (100, 200, 255), (1230, 140, 20, 25))
+        pygame.draw.rect(surf, (255, 220, 100), (1255, 170, 18, 22))
+        # 衣柜
+        cx, cy, cw, ch = 1190, 220, 80, 280
+        pygame.draw.rect(surf, (90, 70, 50), (cx, cy, cw, ch))
+        pygame.draw.line(surf, (70, 55, 38), (cx + cw // 2, cy + 10), (cx + cw // 2, cy + ch - 10), 2)
+        pygame.draw.circle(surf, (160, 130, 90), (cx + cw // 2 - 12, cy + ch // 2), 4)
+        pygame.draw.circle(surf, (160, 130, 90), (cx + cw // 2 + 12, cy + ch // 2), 4)
+        pygame.draw.line(surf, (110, 85, 60), (cx - 3, cy), (cx + cw + 3, cy), 4)
+        pygame.draw.line(surf, (70, 55, 38), (cx, cy), (cx, cy + ch), 3)
+        return surf
 
-        self._draw_wall_details(surface)
-        self._draw_window(surface)
-        self._draw_string_lights(surface)
-        self._draw_posters(surface)
-        self._draw_closet(surface)
+    def _render_ground_to_cache(self) -> pygame.Surface:
+        """将寝室地面预渲染到缓存"""
+        surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        ground_rect = (0, self.ground_y, self.width, self.height - self.ground_y)
+        pygame.draw.rect(surf, (100, 75, 50), ground_rect)
+        for y in range(self.ground_y, self.height, 20):
+            offset = ((y - self.ground_y) // 20) % 2
+            for x in range(-offset * 80, self.width, 160):
+                pygame.draw.rect(surf, (80, 60, 40), (x, y, 155, 18), 1)
+        pygame.draw.line(surf, (130, 100, 65), (0, self.ground_y), (self.width, self.ground_y), 3)
+        return surf
+
+    def draw_background(self, surface: pygame.Surface):
+        """绘制寝室背景（使用缓存）"""
+        self._ensure_cache()
+        if self._bg_cache:
+            surface.blit(self._bg_cache, (0, 0))
+
+    def _draw_wall_details(self, surface: pygame.Surface):
+        pass  # 已缓存到 _bg_cache
+
+    def _draw_window(self, surface: pygame.Surface):
+        pass
+
+    def _draw_string_lights(self, surface: pygame.Surface):
+        pass
+
+    def _draw_posters(self, surface: pygame.Surface):
+        pass
+
+    def _draw_closet(self, surface: pygame.Surface):
+        pass
 
     def _draw_wall_details(self, surface: pygame.Surface):
         """墙面细节 - 墙线、天花板线"""
@@ -276,8 +361,10 @@ class DormStage(Stage):
             )
 
     def draw_ground(self, surface: pygame.Surface):
-        """绘制地面"""
-        self._draw_floor(surface)
+        """绘制地面（使用缓存）"""
+        self._ensure_cache()
+        if self._ground_cache:
+            surface.blit(self._ground_cache, (0, 0))
 
     def draw_platforms(self, surface: pygame.Surface):
         """绘制平台表面（床面高亮线，表示可站立）"""

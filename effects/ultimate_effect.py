@@ -696,6 +696,7 @@ class UltimateEffectManager:
         effect = UltimateEffect(self.screen_width, self.screen_height,
                               character, effect_type, direction)
         self.effects.append(effect)
+        # 暂停游戏直到特效播放完毕（is_paused=True 让 is_playing() 返回 True）
         self.is_paused = True
         self.pause_duration = 2.5
         self.pause_timer = 0.0

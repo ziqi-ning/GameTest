@@ -358,8 +358,8 @@ class ItemDropManager:
                 item._chest_open_timer += dt
 
     def check_pickups(self, players: list) -> None:
-        """For each landed item, find overlapping Players and award to closest."""
-        from entities.player import Player
+        """For each landed item, find overlapping Fighters and award to closest."""
+        from entities.fighter import Fighter
 
         for item in list(self.items):
             if not item.active or not item.landed:
@@ -369,7 +369,7 @@ class ItemDropManager:
             overlapping = []
 
             for p in players:
-                if not isinstance(p, Player):
+                if not isinstance(p, Fighter):
                     continue
                 p_rect = p.get_rect()
                 if self._rects_overlap(item_rect, p_rect):

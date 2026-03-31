@@ -68,6 +68,63 @@ class CastleStage(Stage):
                 'brightness': random.randint(150, 255),
             })
 
+    def _render_bg_to_cache(self) -> pygame.Surface:
+        """将城堡背景预渲染到缓存"""
+        surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        # 天空渐变
+        for y in range(self.height):
+            ratio = y / self.height
+            if ratio < 0.4:
+                t = ratio / 0.4
+                r = int(20 + t * 20)
+                g = int(10 + t * 30)
+                b = int(50 + t * 40)
+            elif ratio < 0.7:
+                t = (ratio - 0.4) / 0.3
+                r = int(40 + t * 160)
+                g = int(40 + t * 60)
+                b = int(90 - t * 20)
+            else:
+                t = (ratio - 0.7) / 0.3
+                r = int(200 + t * 40)
+                g = int(100 - t * 40)
+                b = int(70 - t * 60)
+            pygame.draw.line(surf, (r, g, b), (0, y), (self.width, y), 1)
+        # 星星
+        for sx, sy, sr in self.stars:
+            pygame.draw.circle(surf, (200, 200, 200), (sx, sy), sr)
+        # 月亮
+        mx, my = 1050, 80
+        for i in range(4, 0, -1):
+            glow_color = (255, 240, 180)
+            glow_s = pygame.Surface((60 + i * 10, 60 + i * 10), pygame.SRCALPHA)
+            pygame.draw.circle(glow_s, (*glow_color, 30 - i * 6),
+                             (30 + i * 5, 30 + i * 5), 30 + i * 5)
+            surf.blit(glow_s, (mx - 30 - i * 5, my - 30 - i * 5))
+        pygame.draw.circle(surf, (255, 248, 220), (mx, my), 35)
+        pygame.draw.circle(surf, (230, 225, 200), (mx + 8, my - 5), 12)
+        pygame.draw.circle(surf, (230, 225, 200), (mx - 5, my + 10), 8)
+        pygame.draw.circle(surf, (230, 225, 200), (mx + 2, my + 5), 6)
+        # 背景云
+        for cloud in self.bg_clouds:
+            self._draw_cloud(surf, cloud['x'], cloud['y'], cloud['scale'], alpha=40)
+        # 城堡剪影
+        self._draw_castle(surf, 0, left=True)
+        self._draw_castle(surf, self.width, left=False)
+        return surf
+
+    def _render_ground_to_cache(self) -> pygame.Surface:
+        """将城堡云海地面预渲染到缓存"""
+        surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        for y in range(self.ground_y, self.height):
+            ratio = (y - self.ground_y) / (self.height - self.ground_y)
+            r = int(100 - ratio * 40)
+            g = int(90 - ratio * 30)
+            b = int(130 - ratio * 50)
+            pygame.draw.line(surf, (r, g, b), (0, y), (self.width, y), 1)
+        pygame.draw.line(surf, (150, 160, 200), (0, self.ground_y), (self.width, self.ground_y), 2)
+        return surf
+
     def _generate_clouds(self):
         """生成装饰性云朵（背景装饰，不参与碰撞）"""
         random.seed(99)
@@ -79,12 +136,11 @@ class CastleStage(Stage):
             self.bg_clouds.append({'x': cx, 'y': cy, 'scale': scale})
 
     def draw_background(self, surface: pygame.Surface):
-        """绘制天空背景"""
-        self._draw_sky_gradient(surface)
-        self._draw_stars(surface)
-        self._draw_moon(surface)
-        self._draw_bg_clouds(surface)
-        self._draw_castles(surface)
+        """绘制城堡背景（使用缓存）"""
+        self._ensure_cache()
+        if self._bg_cache:
+            surface.blit(self._bg_cache, (0, 0))
+        # 萤火虫（动态，每帧更新）
         self._draw_fireflies(surface, 0)
 
     def _draw_sky_gradient(self, surface: pygame.Surface):
@@ -273,16 +329,11 @@ class CastleStage(Stage):
             pygame.draw.circle(surface, (220, 230, 250), (bx, by + 3), br - 5)
 
     def draw_ground(self, surface: pygame.Surface):
-        """绘制地面（云海）"""
-        # 云海渐变
-        for y in range(self.ground_y, self.height):
-            ratio = (y - self.ground_y) / (self.height - self.ground_y)
-            r = int(100 - ratio * 40)
-            g = int(90 - ratio * 30)
-            b = int(130 - ratio * 50)
-            pygame.draw.line(surface, (r, g, b), (0, y), (self.width, y))
-
-        # 云海波浪
+        """绘制地面（使用缓存 + 动态波浪）"""
+        self._ensure_cache()
+        if self._ground_cache:
+            surface.blit(self._ground_cache, (0, 0))
+        # 云海波浪（动态）
         t = pygame.time.get_ticks() * 0.001
         for i in range(3):
             wave_y = self.ground_y + 5 + i * 15
@@ -292,12 +343,8 @@ class CastleStage(Stage):
                 points.append((x, wy))
             if len(points) >= 2:
                 for j in range(len(points) - 1):
-                    alpha = 180 - i * 50
                     color = (200, 215, 240)
                     pygame.draw.line(surface, color, points[j], points[j + 1], 2)
-
-        # 地面分界线
-        pygame.draw.line(surface, (150, 160, 200), (0, self.ground_y), (self.width, self.ground_y), 2)
 
     def draw_platforms(self, surface: pygame.Surface):
         """绘制平台站立面"""

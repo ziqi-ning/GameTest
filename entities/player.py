@@ -24,7 +24,7 @@ class Player(Fighter):
         self.is_human = True
         self._opponent_ref = None  # 保存对手引用用于必杀技
 
-    def handle_input(self, left: bool, right: bool, up: bool, down: bool,
+    def handle_input(self, dt: float, left: bool, right: bool, up: bool, down: bool,
                    light_attack: bool, heavy_attack: bool,
                    special: bool, special_2: bool, block: bool,
                    summon_minion: bool = False, toggle_minion: bool = False):
@@ -34,9 +34,9 @@ class Player(Fighter):
 
         # 攻击输入 (优先级: 必杀技2 > 必杀技1 > 重攻击 > 轻攻击)
         if special_2:
-            self.attack_special(move_index=1)
+            self.attack_special(dt, move_index=1)
         elif special:
-            self.attack_special(move_index=0)
+            self.attack_special(dt, move_index=0)
         elif heavy_attack and self.attack_cooldown <= 0:
             if not self.attack_weapon():
                 self.attack_heavy()

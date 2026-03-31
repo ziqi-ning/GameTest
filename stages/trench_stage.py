@@ -83,15 +83,83 @@ class TrenchStage(Stage):
                 'phase': random.uniform(0, math.pi * 2),
             })
 
+    def _render_bg_to_cache(self) -> pygame.Surface:
+        """将战壕背景预渲染到缓存"""
+        surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        # 阴沉天空
+        for y in range(self.height):
+            ratio = y / self.height
+            r = int(80 + ratio * 60)
+            g = int(70 + ratio * 50)
+            b = int(50 + ratio * 30)
+            pygame.draw.line(surf, (r, g, b), (0, y), (self.width, y), 1)
+        # 远处爆炸光晕
+        for pos, color in [((200, 200), (180, 120, 40)), ((1050, 180), (160, 100, 30))]:
+            glow = pygame.Surface((120, 80), pygame.SRCALPHA)
+            pygame.draw.ellipse(glow, (*color, 40), (0, 0, 120, 80))
+            surf.blit(glow, (pos[0] - 60, pos[1] - 40))
+        # 泥土地面
+        ground_y = self.ground_y
+        pygame.draw.rect(surf, (85, 68, 45), (0, ground_y, self.width, self.height - ground_y))
+        for i in range(0, self.width, 40):
+            shade = random.randint(-8, 8)
+            c = max(0, min(255, 85 + shade))
+            pygame.draw.line(surf, (c, c - 15, c - 35), (i, ground_y), (i + 20, ground_y + 5), 2)
+        # 弹坑
+        for cx, cy, cr in self.craters:
+            pygame.draw.ellipse(surf, (45, 35, 20), (cx - cr, cy - cr // 2, cr * 2, cr))
+            pygame.draw.ellipse(surf, (55, 43, 28), (cx - cr + 4, cy - cr // 2 + 2, cr * 2 - 8, cr - 4))
+        # 战壕墙体
+        pygame.draw.rect(surf, (75, 62, 45), (30, 310, 200, 270))
+        pygame.draw.rect(surf, (95, 80, 58), (30, 305, 200, 15))
+        for row in range(5):
+            for col in range(4):
+                bx = 35 + col * 48
+                by = 320 + row * 50
+                pygame.draw.rect(surf, (88, 72, 52), (bx, by, 44, 22), border_radius=4)
+                pygame.draw.rect(surf, (65, 53, 38), (bx, by, 44, 22), 1, border_radius=4)
+        pygame.draw.rect(surf, (68, 55, 40), (230, 380, 20, 200))
+        pygame.draw.rect(surf, (85, 70, 50), (230, 375, 20, 12))
+        pygame.draw.rect(surf, (75, 62, 45), (1050, 310, 200, 270))
+        pygame.draw.rect(surf, (95, 80, 58), (1050, 305, 200, 15))
+        for row in range(5):
+            for col in range(4):
+                bx = 1055 + col * 48
+                by = 320 + row * 50
+                pygame.draw.rect(surf, (88, 72, 52), (bx, by, 44, 22), border_radius=4)
+                pygame.draw.rect(surf, (65, 53, 38), (bx, by, 44, 22), 1, border_radius=4)
+        pygame.draw.rect(surf, (68, 55, 40), (1030, 380, 20, 200))
+        pygame.draw.rect(surf, (85, 70, 50), (1030, 375, 20, 12))
+        # 中间掩体木箱
+        boxes = [(380, 470), (760, 470), (480, 360), (680, 360), (570, 250)]
+        for bx, by in boxes:
+            pygame.draw.rect(surf, (110, 85, 55), (bx, by, 140, 30), border_radius=3)
+            pygame.draw.rect(surf, (90, 68, 42), (bx, by, 140, 30), 2, border_radius=3)
+            pygame.draw.line(surf, (90, 68, 42), (bx + 46, by), (bx + 46, by + 30), 1)
+            pygame.draw.line(surf, (90, 68, 42), (bx + 93, by), (bx + 93, by + 30), 1)
+            pygame.draw.line(surf, (90, 68, 42), (bx, by + 15), (bx + 140, by + 15), 1)
+        # 战壕坑
+        pygame.draw.rect(surf, (60, 48, 30), (30, 520, 220, 60))
+        pygame.draw.rect(surf, (50, 40, 25), (30, 540, 220, 40))
+        pygame.draw.rect(surf, (60, 48, 30), (1030, 520, 220, 60))
+        pygame.draw.rect(surf, (50, 40, 25), (1030, 540, 220, 40))
+        return surf
+
+    def _render_ground_to_cache(self) -> pygame.Surface:
+        """战壕不需要单独的地面缓存（已包含在 _render_bg_to_cache 中）"""
+        return pygame.Surface((1, 1), pygame.SRCALPHA)
+
+    def draw_ground(self, surface: pygame.Surface):
+        """战壕地面已包含在 draw_background 的缓存中，无需额外绘制"""
+        pass
+
     def draw_background(self, surface: pygame.Surface):
-        """绘制战壕背景"""
-        self._draw_sky(surface)
-        self._draw_ground(surface)
-        self._draw_craters(surface)
-        self._draw_trench_walls(surface)
+        """绘制战壕背景（使用缓存 + 动态烟雾）"""
+        self._ensure_cache()
+        if self._bg_cache:
+            surface.blit(self._bg_cache, (0, 0))
+        # 动态烟雾
         self._draw_smoke(surface)
-        self._draw_barbed_wire(surface)
-        self.draw_platforms(surface)
 
     def _draw_sky(self, surface: pygame.Surface):
         """阴沉战场天空"""
@@ -221,3 +289,9 @@ class TrenchStage(Stage):
             pygame.draw.rect(surface, (95, 80, 58), (px, py, pw, 8), border_radius=2)
         for px, py, pw in box_platforms:
             pygame.draw.rect(surface, (115, 90, 58), (px, py, pw, 8), border_radius=2)
+
+    def draw(self, surface: pygame.Surface):
+        """绘制场景（背景已缓存，动态元素每帧绘制）"""
+        self.draw_background(surface)
+        self._draw_barbed_wire(surface)
+        self.draw_platforms(surface)

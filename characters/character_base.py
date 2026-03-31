@@ -62,7 +62,8 @@ class SpecialMoveData:
     projectile: bool = False  # 是否产生投射物
     projectile_speed: float = 10  # 投射物速度
     effect_type: str = "none"  # 特殊效果
-    effect_duration: float = 0.0  # 效果持续时间
+    effect_duration: float = 0.0  # 效果持续时间（实体存活时间）
+    animation_lock: float = 0.0   # 玩家动画锁定时间（=0则用effect_duration）
     effect_value: float = 0.0  # 效果数值
 
 
@@ -302,26 +303,27 @@ def get_zitong_moves(stats: CharacterStats) -> List[MoveData]:
 
 def get_gong_dage_special(stats: CharacterStats) -> List[SpecialMoveData]:
     """龚大哥的必杀技 - 爱国系列
-    L键(0)：爱国之心 - 伤害：近战爆发+眩晕
+    L键(0)：爱国之心 - 全屏五星红旗范围伤害，中额伤害
     I键(1)：爱国护盾 - 增益：生成护盾"""
     power_mult = stats.attack_power / 80.0
     return [
         SpecialMoveData(
             name="爱国之心",
             name_cn="爱国之心",
-            damage=int(180 * power_mult),
+            damage=int(200 * power_mult),  # 中额伤害
             energy_cost=80,
-            hitbox_offset=(60, 0),
-            hitbox_size=(150, 120),
-            active_start=6,
-            active_frames=12,
-            total_frames=25,
-            hitstun=30,
-            knockback=25,
-            knockback_up=10,
-            effect_type="stun",
-            effect_duration=1.5,
-            effect_value=0
+            hitbox_offset=(640, 0),    # 全屏宽度偏移
+            hitbox_size=(1280, 720),   # 全屏范围
+            active_start=0,
+            active_frames=999,         # 持续整局
+            total_frames=999,
+            hitstun=25,
+            knockback=15,
+            knockback_up=5,
+            effect_type="national_flag",  # 全屏国旗
+            effect_duration=3.0,
+            effect_value=200,  # damage value
+            animation_lock=1.0,  # 玩家动画锁定1秒
         ),
         SpecialMoveData(
             name="爱国护盾",
@@ -344,26 +346,26 @@ def get_gong_dage_special(stats: CharacterStats) -> List[SpecialMoveData]:
 
 def get_junshi_special(stats: CharacterStats) -> List[SpecialMoveData]:
     """军师的必杀技 - 实验室系列
-    L键(0)：实验室终极射线 - 伤害：近战能量爆发+灼烧
+    L键(0)：高能激光 - 蓝色高能激光对同一行造成巨额伤害
     I键(1)：实验室强化 - 增益：5连发激光枪，持续10秒"""
     power_mult = stats.attack_power / 80.0
     return [
         SpecialMoveData(
-            name="实验室终极射线",
-            name_cn="实验室终极射线",
-            damage=int(200 * power_mult),
+            name="高能激光",
+            name_cn="高能激光",
+            damage=int(400 * power_mult),  # 巨额伤害
             energy_cost=80,
-            hitbox_offset=(80, 10),
-            hitbox_size=(150, 60),
-            active_start=5,
-            active_frames=15,
-            total_frames=28,
-            hitstun=35,
-            knockback=20,
-            knockback_up=8,
-            effect_type="burn",
-            effect_duration=3.0,
-            effect_value=30
+            hitbox_offset=(640, 0),   # 半屏宽度偏移
+            hitbox_size=(640, 220),  # 激光宽度范围
+            active_start=0,
+            active_frames=999,
+            total_frames=999,
+            hitstun=40,
+            knockback=30,
+            knockback_up=15,
+            effect_type="laser_beam",  # 激光束
+            effect_duration=2.5,
+            effect_value=400  # damage value
         ),
         SpecialMoveData(
             name="实验室强化",
@@ -386,25 +388,26 @@ def get_junshi_special(stats: CharacterStats) -> List[SpecialMoveData]:
 
 def get_shenmiren_special(stats: CharacterStats) -> List[SpecialMoveData]:
     """神秘人的必杀技 - 叛国系列
-    L键(0)：叛国瞬斩 - 伤害：近战瞬移斩击
+    L键(0)：黑影瞬斩 - 分裂黑影瞬移到敌人身后持续伤害，可召唤无上限个
     I键(1)：叛国血脉 - 增益：吸血效果，攻击伤害的1/3回复生命，持续10秒"""
     power_mult = stats.attack_power / 80.0
     return [
         SpecialMoveData(
-            name="叛国瞬斩",
-            name_cn="叛国瞬斩",
+            name="黑影瞬斩",
+            name_cn="黑影瞬斩",
             damage=int(160 * power_mult),
             energy_cost=80,
             hitbox_offset=(0, 0),
-            hitbox_size=(200, 150),
-            active_start=3,
-            active_frames=8,
-            total_frames=20,
+            hitbox_size=(200, 150),  # 黑影判定范围
+            active_start=0,
+            active_frames=60,
+            total_frames=60,
             hitstun=20,
             knockback=15,
             knockback_up=5,
-            effect_type="teleport",
-            effect_duration=0.5
+            effect_type="shadow_clone",  # 黑影瞬移
+            effect_duration=8.0,  # 黑影存在8秒
+            animation_lock=1.0     # 玩家动画锁定1秒
         ),
         SpecialMoveData(
             name="叛国血脉",
@@ -420,6 +423,7 @@ def get_shenmiren_special(stats: CharacterStats) -> List[SpecialMoveData]:
             knockback=0,
             effect_type="lifesteal",
             effect_duration=10.0,
+            animation_lock=1.0,  # 玩家锁定1秒
             effect_value=0.33  # 33%吸血
         ),
     ]
@@ -427,26 +431,26 @@ def get_shenmiren_special(stats: CharacterStats) -> List[SpecialMoveData]:
 
 def get_zitong_special(stats: CharacterStats) -> List[SpecialMoveData]:
     """籽桐的必杀技 - 雕系列
-    L键(0)：雕羽风暴 - 伤害：近战多段打击羽毛乱舞
-    I键(1)：冰雕凝视 - 减益：强制冻结敌人10秒"""
+    L键(0)：雕与蛋 - 召唤大公鸡和鸡蛋，把敌人吸入鸡蛋内持续啄击5秒
+    I键(1)：冰雕凝视 - 减益：强制冻结敌人2.5秒（原5秒削弱）"""
     power_mult = stats.attack_power / 80.0
     return [
         SpecialMoveData(
-            name="雕羽风暴",
-            name_cn="雕羽风暴",
-            damage=int(100 * power_mult),
+            name="雕与蛋",
+            name_cn="雕与蛋",
+            damage=int(100 * power_mult),  # 每0.5秒30伤害
             energy_cost=80,
-            hitbox_offset=(80, 0),
-            hitbox_size=(180, 120),
-            active_start=5,
-            active_frames=15,
-            total_frames=30,
+            hitbox_offset=(0, 0),
+            hitbox_size=(150, 150),  # 鸡蛋吸入范围
+            active_start=0,
+            active_frames=999,
+            total_frames=999,
             hitstun=16,
             knockback=8,
             knockback_up=2,
-            effect_type="multi_hit",
-            effect_duration=0,
-            effect_value=5  # 多次打击
+            effect_type="chicken_egg",  # 鸡+鸡蛋
+            effect_duration=5.0,  # 持续5秒
+            animation_lock=1.5     # 玩家锁定1.5秒
         ),
         SpecialMoveData(
             name="冰雕凝视",
@@ -461,7 +465,7 @@ def get_zitong_special(stats: CharacterStats) -> List[SpecialMoveData]:
             hitstun=0,
             knockback=0,
             effect_type="freeze",
-            effect_duration=5.0,  # 5秒
+            effect_duration=2.5,  # 削弱为2.5秒（原5秒）
             effect_value=0  # 无伤害，只冻结
         ),
     ]
