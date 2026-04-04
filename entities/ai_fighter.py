@@ -62,7 +62,7 @@ class SituationAssessment:
         # 能量优势（权重20%）
         energy_weight = 0.2
         ai_score += self.energy_ratio * energy_weight
-        opp_score += (opponent.special_energy / max(1, opponent.max_special)) * energy_weight
+        opp_score += (self.opponent.special_energy / max(1, self.opponent.max_special)) * energy_weight
 
         # 位置优势（权重20%）：靠近中央更安全
         pos_weight = 0.2
@@ -328,6 +328,12 @@ class TacticalDecision:
 
 class TacticalEngine:
     """战术决策引擎 - 生成并优先排序所有可能的行动"""
+
+    PRIORITY_EMERGENCY = 1       # 紧急：必须立即响应
+    PRIORITY_SURVIVAL = 2        # 生存：保命优先
+    PRIORITY_TACTICAL = 3        # 战术：策略性行动
+    PRIORITY_OPPORTUNISTIC = 4   # 机会：见机行事
+    PRIORITY_PRESERVATION = 5    # 保守：稳定局势
 
     def __init__(self, ai: 'AIFighter', opponent: Fighter,
                  situation: SituationAssessment, model: OpponentModel,

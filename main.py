@@ -54,6 +54,15 @@ class Game:
         # 加载界面
         self.loading_screen = LoadingScreen(SCREEN_WIDTH, SCREEN_HEIGHT)
         self._loading_stage = 0          # 加载阶段索引
+        self._loading_frame = 0          # 当前阶段已渲染帧数（至少1帧才能显示进度）
+        self._loading_progress = [       # 阶段 → (进度, 描述)
+            (0.10, "加载地图资源..."),
+            (0.30, "预渲染地图背景..."),
+            (0.55, "加载角色精灵..."),
+            (0.75, "加载道具贴图..."),
+            (0.90, "初始化战斗系统..."),
+            (1.00, "战斗开始!"),
+        ]
         self._loading_p1_char = 0       # 待加载的P1角色索引
         self._loading_p2_char = 0       # 待加载的P2角色索引
 
@@ -501,6 +510,13 @@ class Game:
         """分帧加载资源，避免一次性卡顿"""
         self.loading_screen.update(dt)
 
+        # 每步至少渲染1帧再进入下一步（让进度条可见）
+        if self._loading_frame < 1:
+            self._loading_frame += 1
+            prog, status = self._loading_progress[self._loading_stage]
+            self.loading_screen.set_progress(prog, status)
+            return
+
         stages = [
             (0.10, "加载地图资源...",        self._loading_step_bg),
             (0.30, "预渲染地图背景...",      self._loading_step_bg_cache),
@@ -510,16 +526,17 @@ class Game:
             (1.00, "战斗开始!",             self._loading_step_done),
         ]
 
-        prog, status, action = stages[min(self._loading_stage, len(stages) - 1)]
-        self.loading_screen.set_progress(prog, status)
+        if self._loading_stage < len(stages):
+            prog, status, action = stages[self._loading_stage]
+            self.loading_screen.set_progress(prog, status)
+            if action():
+                self._loading_stage += 1
+                self._loading_frame = 0
+                if self._loading_stage >= len(stages):
+                    self.state = GameState.FIGHTING
+                    self.start_round()
 
-        if action(dt):
-            self._loading_stage += 1
-            if self._loading_stage >= len(stages):
-                self.state = GameState.FIGHTING
-                self.start_round()
-
-    def _loading_step_bg(self, dt: float) -> bool:
+    def _loading_step_bg(self, dt: float = 0.0) -> bool:
         """步骤0：加载地图"""
         map_info = MAPS[self.selected_map_index]
         self.selected_map = map_info
@@ -527,24 +544,24 @@ class Game:
         self.loading_screen.set_map_name(map_info['name'])
         return True
 
-    def _loading_step_bg_cache(self, dt: float) -> bool:
+    def _loading_step_bg_cache(self, dt: float = 0.0) -> bool:
         """步骤1：触发地图背景预渲染（在下一帧首次绘制时完成）"""
         self.stage._ensure_cache()
         return True
 
-    def _loading_step_sprites(self, dt: float) -> bool:
+    def _loading_step_sprites(self, dt: float = 0.0) -> bool:
         """步骤2：加载角色精灵"""
         from animation.sprite_loader import sprite_loader
         sprite_loader.preload_all()
         return True
 
-    def _loading_step_items(self, dt: float) -> bool:
+    def _loading_step_items(self, dt: float = 0.0) -> bool:
         """步骤3：加载道具贴图"""
         from entities.item_drop import ItemDrop
         ItemDrop.load_images()
         return True
 
-    def _loading_step_fight(self, dt: float) -> bool:
+    def _loading_step_fight(self, dt: float = 0.0) -> bool:
         """步骤4：初始化战斗数据"""
         p1_data = get_character(self._loading_p1_char)
         p2_data = get_character(self._loading_p2_char)
@@ -570,7 +587,7 @@ class Game:
         self.fight_ui.p2_skills.skill2_color = p2_data.stats.secondary_color
         return True
 
-    def _loading_step_done(self, dt: float) -> bool:
+    def _loading_step_done(self, dt: float = 0.0) -> bool:
         """步骤5：完成"""
         return True
 
